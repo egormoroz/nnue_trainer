@@ -16,11 +16,12 @@ def is_quiet(board: chess.Board, move: chess.Move) -> bool:
         or board.is_check()
     )
 
-counter = 0
+n_positions, n_games = 0, 0
+duplicates = set()
 
-async def analyze_game(engine, game, limit, 
-        duplicates, writer) -> None:
-    global counter
+async def analyze_game(engine, game, limit, writer) -> None:
+    global n_positions, n_games, duplicates
+
     board = game.board()
     for move in game.mainline_moves():
         quiet = is_quiet(board, move)
@@ -41,9 +42,11 @@ async def analyze_game(engine, game, limit,
         score = info['score'].relative.score()
         fen = board.fen()
 
-        print(f"{counter}. {score} {fen}")
+        print(f"[{n_games}/{n_positions}] {score} {fen}")
         writer.write_entry(fen, score)
-        counter += 1
+        n_positions += 1
+
+    n_games += 1
 
 
 async def analyze_pgn(e_path, pgn, limit, writer) -> None:
@@ -51,8 +54,7 @@ async def analyze_pgn(e_path, pgn, limit, writer) -> None:
     duplicates = set()
     game = chess.pgn.read_game(pgn)
     while game is not None:
-        await analyze_game(engine, game, limit, 
-            duplicates, writer)
+        await analyze_game(engine, game, limit, writer)
         game = chess.pgn.read_game(pgn)
 
 
@@ -61,7 +63,7 @@ async def main() -> None:
     dll = load_dll('./my_dll.dll')
     writer = BinWriter(dll, 'out.bin')
 
-    limit = chess.engine.Limit(depth=12)
+    limit = chess.engine.Limit(time=0.5, depth=12)
     workers = [
         analyze_pgn('saturn.exe', pgn, limit, writer)
         for _ in range(8)
