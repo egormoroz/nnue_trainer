@@ -3,23 +3,8 @@ import chess
 import chess.engine
 import chess.pgn
 import chess.polyglot
-import ctypes
-import atexit
 
-class BinWriter:
-    def __init__(self, dll_path: str):
-        self.dll = ctypes.cdll.LoadLibrary(dll_path)
-        atexit.register(self.close_file)
-
-    def open_file(self, path: str) -> bool:
-        return bool(self.dll.open_file(path.encode('utf-8')))
-
-    def write_entry(self, fen: str, score: int) -> bool:
-        return bool(self.dll.write_entry(fen.encode('utf-8'),
-            score))
-
-    def close_file(self) -> bool:
-        return bool(self.dll.close_file())
+from ffi import *
 
 
 def is_quiet(board: chess.Board, move: chess.Move) -> bool:
@@ -73,8 +58,8 @@ async def analyze_pgn(e_path, pgn, limit, writer) -> None:
 
 async def main() -> None:
     pgn = open('battle.pgn')
-    writer = BinWriter('./packer.dll')
-    writer.open_file('packed.bin')
+    dll = load_dll('./my_dll.dll')
+    writer = BinWriter(dll, 'out.bin')
 
     limit = chess.engine.Limit(depth=12)
     workers = [

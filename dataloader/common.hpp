@@ -113,5 +113,15 @@ constexpr Piece piece_from_ch(char ch) {
     };
 }
 
+constexpr uint16_t halfkp_idx(int ksq, int psq, int pt, int c) {
+    int p_idx = pt * 2 + c;
+    return static_cast<uint16_t>(
+        psq + (p_idx + ksq * 10) * 64
+    );
+}
+
+constexpr int MAX_ACTIVE_FEATURES = 32;
+constexpr int MAX_FEATURE_INDEX = 40960 - 1;
+
 
 #endif
