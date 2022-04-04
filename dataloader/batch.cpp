@@ -20,9 +20,9 @@ void add_features(const TrainingEntry &e, int sample_idx,
     for (int i = 0; i < e.num_pieces; ++i) {
         features[features_nb * 2] = sample_idx;
         features[features_nb * 2 + 1] = indices[i];
+        ++features_nb;
     }
 
-    ++features_nb;
 }
 
 } //namespace
@@ -38,6 +38,8 @@ void SparseBatch::fill(const TrainingEntry *entries, int n) {
 
         stm[i] = e.stm == WHITE;
         score[i] = e.score;
+        result[i] = +e.result == +e.stm;
+        result[i] += float(e.result == DRAW) * 0.5f;
 
         add_features(e, i, white_fts_indices, 
                 n_active_white_fts, e.kings[WHITE]);

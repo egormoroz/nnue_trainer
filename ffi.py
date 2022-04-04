@@ -1,22 +1,23 @@
 import ctypes as ct
 import atexit
 
-BATCH_SIZE = 256
+BATCH_SIZE = 2048
 MAX_ACTIVE_FEATURES = 32
 
-class SparseBatchStruct(ct.Structure):
+class SparseBatch(ct.Structure):
     _fields_ = [
         ('size', ct.c_int),
-        ('n_active_white_fts', ct.c_int),
-        ('n_active_black_fts', ct.c_int),
+        ('n_wfts', ct.c_int),
+        ('n_bfts', ct.c_int),
 
         ('stm', ct.c_float * BATCH_SIZE),
         ('score', ct.c_float * BATCH_SIZE),
+        ('result', ct.c_float * BATCH_SIZE),
 
-        ('white_fts_indices', 
-            ct.c_int * BATCH_SIZE * MAX_ACTIVE_FEATURES * 2),
-        ('black_fts_indices', 
-            ct.c_int * BATCH_SIZE * MAX_ACTIVE_FEATURES * 2),
+        ('wft_indices', 
+            ct.c_int * (BATCH_SIZE * MAX_ACTIVE_FEATURES * 2)),
+        ('bft_indices', 
+            ct.c_int * (BATCH_SIZE * MAX_ACTIVE_FEATURES * 2)),
     ]
 
 
@@ -36,14 +37,14 @@ def load_dll(dll_path: str):
     dll.delete_binreader.restype = None
 
     dll.write_entry.argtypes = (ct.c_void_p, ct.c_char_p,
-            ct.c_int)
+            ct.c_int, ct.c_int)
     dll.write_entry.restype = ct.c_int
 
     dll.next_batch.argtypes = (ct.c_void_p,)
     dll.next_batch.restype = ct.c_int
 
     dll.get_batch.argtypes = (ct.c_void_p,)
-    dll.get_batch.restype = ct.POINTER(SparseBatchStruct)
+    dll.get_batch.restype = ct.POINTER(SparseBatch)
 
     return dll
 
@@ -58,9 +59,9 @@ class BinWriter:
     def cleanup(self):
         self.dll.delete_binwriter(self.writer)
         
-    def write_entry(self, fen: str, score: int) -> int:
+    def write_entry(self, fen: str, score: int, result: int) -> int:
         fen = fen.encode('utf-8')
-        return self.dll.write_entry(self.writer, fen, score)
+        return self.dll.write_entry(self.writer, fen, score, result)
 
 
 class BinReader:
@@ -71,7 +72,7 @@ class BinReader:
         atexit.register(self.cleanup)
 
     def get_batch(self):
-        return self.dll.get_batch(self.reader)
+        return self.dll.get_batch(self.reader).contents
 
     def next_batch(self):
         return self.dll.next_batch(self.reader)

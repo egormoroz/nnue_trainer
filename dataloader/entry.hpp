@@ -16,6 +16,8 @@ struct TrainingEntry {
 
     uint8_t num_pieces;
     Color stm;
+
+    GameResult result;
 };
 
 #endif

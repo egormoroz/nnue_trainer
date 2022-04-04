@@ -43,15 +43,18 @@ OStream::OStream(std::ostream &os)
     memset(buffer_, 0, sizeof(buffer_));
 }
 
-void OStream::write_entry(int16_t score, Color stm, 
-        uint64_t mask, const Piece *pieces, int n_pieces) 
+void OStream::write_entry(int16_t score, Color stm, uint64_t mask, 
+        const Piece *pieces, int n_pieces, GameResult result) 
 {
     if (writer_.cursor > (sizeof(buffer_) - 32) * 8)
         flush();
 
     writer_.write(score);
+    writer_.write_bit(result);
+    writer_.write_bit(result >> 1);
     writer_.write_bit(stm);
     writer_.write(mask);
+
     for (int i = 0; i < n_pieces; ++i) {
         Piece p = pieces[i];
         auto &encoding = huffman::e_table[type_of(p)];
@@ -111,12 +114,15 @@ void IStream::read_batch(SparseBatch &batch) {
 
         entries_.push_back(e);
     }
-
     batch.fill(entries_.data(), entries_.size());
 }
 
 void IStream::decode_entry(TrainingEntry &e) {
     e.score = static_cast<int16_t>(reader_.read16());
+
+    e.result = static_cast<GameResult>(
+        reader_.read_bit() | reader_.read_bit() << 1);
+
     e.stm = Color(reader_.read_bit());
     e.num_pieces = 0;
     e.kings[WHITE] = e.kings[BLACK] = 0;

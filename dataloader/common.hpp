@@ -123,5 +123,10 @@ constexpr uint16_t halfkp_idx(int ksq, int psq, int pt, int c) {
 constexpr int MAX_ACTIVE_FEATURES = 32;
 constexpr int MAX_FEATURE_INDEX = 40960 - 1;
 
+enum GameResult : uint8_t {
+    WHITE_WINS = WHITE,
+    BLACK_WINS = BLACK,
+    DRAW,
+};
 
 #endif

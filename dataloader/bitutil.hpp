@@ -45,15 +45,15 @@ struct BitWriter {
     }
 
     template<typename T>
-    void write(T x, size_t n_bits = sizeof(T) * 8) {
-        using U = std::decay_t<T>;
-        static_assert(std::is_integral_v<U>, "must be integral");
-        static_assert(!std::is_same_v<U, bool>, "use write_bit to write a single bit");
+    void write(T y, size_t n_bits = sizeof(std::decay_t<T>) * 8) {
+        using U = std::make_unsigned_t<std::decay_t<T>>;
+        U x = static_cast<U>(y);
 
         x &= (2ull << (n_bits - 1)) - 1ull;
 
         size_t byte_idx = cursor / 8, bit_idx = cursor % 8;
         cursor += n_bits;
+
         data[byte_idx] |= static_cast<uint8_t>(x) << bit_idx;
         *(U*)&data[byte_idx + 1] |= x >> (8 - bit_idx);
     }

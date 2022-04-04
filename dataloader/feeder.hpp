@@ -31,7 +31,7 @@ extern "C" DLL_EXPORT void delete_binwriter(BinWriter*);
 extern "C" DLL_EXPORT void delete_binreader(BinReader*);
 
 extern "C" DLL_EXPORT int write_entry(BinWriter *writer,
-    const char *fen, int score);
+    const char *fen, int score, int result);
 extern "C" DLL_EXPORT int next_batch(BinReader *reader);
 
 extern "C" DLL_EXPORT SparseBatch* get_batch(BinReader *reader);

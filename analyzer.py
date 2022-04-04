@@ -22,8 +22,20 @@ duplicates = set()
 async def analyze_game(engine, game, limit, writer) -> None:
     global n_positions, n_games, duplicates
 
+    result = game.headers['Result']
+    if result == '1-0':
+        result = 0
+        r = 1
+    elif result == '0-1':
+        result = 1
+        r = 0
+    else:
+        result = 2
+        r = 0.5
+
     board = game.board()
     for move in game.mainline_moves():
+        r = 1 - r
         quiet = is_quiet(board, move)
         board.push(move)
 
@@ -38,20 +50,22 @@ async def analyze_game(engine, game, limit, writer) -> None:
 
         if not 'score' in info:
             continue
-
         score = info['score'].relative.score()
+        if score is None:
+            continue
+
         fen = board.fen()
 
-        print(f"[{n_games}/{n_positions}] {score} {fen}")
-        writer.write_entry(fen, score)
+        print(f"[{n_games}/{n_positions}] {score} {r} {fen}")
+        writer.write_entry(fen, score, result)
         n_positions += 1
 
     n_games += 1
 
 
 async def analyze_pgn(e_path, pgn, limit, writer) -> None:
+    global n_games
     transport, engine = await chess.engine.popen_uci(e_path)
-    duplicates = set()
     game = chess.pgn.read_game(pgn)
     while game is not None:
         await analyze_game(engine, game, limit, writer)

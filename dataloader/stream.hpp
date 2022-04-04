@@ -13,7 +13,7 @@ struct OStream {
     //popcnt(mask) == n_pieces
     //Dumps the buffer automatically
     void write_entry(int16_t score, Color stm, uint64_t mask, 
-            const Piece *pieces, int n_pieces);
+            const Piece *pieces, int n_pieces, GameResult result);
 
     //dumps the bytes of the buffer to the ostream
     //NB: doesn't write the last byte if it's incomplete

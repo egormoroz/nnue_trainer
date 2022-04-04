@@ -26,7 +26,9 @@ void delete_binreader(BinReader* r) {
     delete r;
 }
 
-int write_entry(BinWriter *writer, const char *fen, int score) {
+int write_entry(BinWriter *writer, const char *fen, 
+        int score, int result) 
+{
     if (!writer->fout.is_open())
         return 0;
 
@@ -35,7 +37,7 @@ int write_entry(BinWriter *writer, const char *fen, int score) {
         return 0;
 
     writer->os.write_entry(static_cast<int16_t>(score),
-        b.stm, b.mask, b.pieces, b.n_pieces);
+        b.stm, b.mask, b.pieces, b.n_pieces, GameResult(result));
 
     return 1;
 }
