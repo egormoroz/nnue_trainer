@@ -84,7 +84,7 @@ def train_step(nnue: NNUE, batch: SparseBatch, optimizer):
     w, b, stm, score, result = get_tensors(batch)
 
     pred = nnue.forward(w, b, stm)
-    loss = loss_function(0.0, pred, w, b, stm, score, result)
+    loss = loss_function(1.0, pred, w, b, stm, score, result)
     loss.backward()
     optimizer.step()
     nnue.zero_grad()

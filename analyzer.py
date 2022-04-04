@@ -39,18 +39,24 @@ async def analyze_game(engine, game, limit, writer) -> None:
         quiet = is_quiet(board, move)
         board.push(move)
 
-        pos_hash = chess.polyglot.zobrist_hash(board)
+        if board.is_checkmate() or board.is_stalemate():
+            break
 
+        pos_hash = chess.polyglot.zobrist_hash(board)
         if not quiet or pos_hash in duplicates:
             continue
 
         duplicates.add(pos_hash)
-
         info = await engine.analyse(board, limit)
 
         if not 'score' in info:
             continue
-        score = info['score'].relative.score()
+
+        score = info['score'].relative
+        if score.is_mate():
+            break
+
+        score = score.score()
         if score is None:
             continue
 
@@ -68,7 +74,12 @@ async def analyze_pgn(e_path, pgn, limit, writer) -> None:
     transport, engine = await chess.engine.popen_uci(e_path)
     game = chess.pgn.read_game(pgn)
     while game is not None:
-        await analyze_game(engine, game, limit, writer)
+        try:
+            await analyze_game(engine, game, limit, writer)
+        except:
+            transport.kill()
+            transport, engine = await chess.engine.popen_uci(e_path)
+
         game = chess.pgn.read_game(pgn)
 
 
@@ -80,7 +91,7 @@ async def main() -> None:
     limit = chess.engine.Limit(time=0.5, depth=12)
     workers = [
         analyze_pgn('saturn.exe', pgn, limit, writer)
-        for _ in range(8)
+        for _ in range(1)
     ]
     await asyncio.gather(*workers)
 
