@@ -100,19 +100,19 @@ def main():
     optimizer = torch.optim.Adam(nnue.parameters())
 
     batch = r.get_batch()
-    batches = []
+    # batches = []
 
     while r.next_batch() != 0:
         train_step(nnue, batch, optimizer)
 
-        batch_copy = SparseBatch()
-        ct.memmove(ct.addressof(batch_copy), 
-            ct.addressof(batch), ct.sizeof(batch))
-        batches.append(batch_copy)
+        # batch_copy = SparseBatch()
+        # ct.memmove(ct.addressof(batch_copy), 
+        #     ct.addressof(batch), ct.sizeof(batch))
+        # batches.append(batch_copy)
 
-    for _ in range(10_000):
-        for b in batches:
-            train_step(nnue, b, optimizer)
+    # for _ in range(10_000):
+    #     for b in batches:
+    #         train_step(nnue, b, optimizer)
     
 
 if __name__ == '__main__':

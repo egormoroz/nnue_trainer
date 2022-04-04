@@ -95,6 +95,8 @@ IStream::IStream(std::istream &is)
     entries_.reserve(SparseBatch::MAX_SIZE);
 }
 
+void IStream::set_wrap(bool wrap) { wrap_ = wrap; }
+
 bool IStream::eof() const { return eof_; }
 
 void IStream::read_batch(SparseBatch &batch) {
@@ -108,8 +110,9 @@ void IStream::read_batch(SparseBatch &batch) {
     for (int i = 0; i < SparseBatch::MAX_SIZE; ++i) {
         decode_entry(e);
         if (!e.num_pieces) {
-            eof_ = true;
-            break;
+            handle_eof();
+            if (eof_)
+                break;
         }
 
         entries_.push_back(e);
@@ -172,5 +175,16 @@ void IStream::fetch_data() {
 
     if (n < 2 * N - bytes_left)
         memset(&buffer_[bytes_left + n], 0, 2 * N - bytes_left - n);
+}
+
+void IStream::handle_eof() {
+    eof_ = true;
+    if (!wrap_ || !reader_.cursor)
+        return;
+
+    is_.seekg(0, is_.beg);
+    is_.read((char*)buffer_.data(), buffer_.size());
+    reader_.cursor = 0;
+    eof_ = false;
 }
 

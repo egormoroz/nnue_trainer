@@ -34,16 +34,19 @@ private:
 struct IStream {
     IStream(std::istream &is);
 
+    void set_wrap(bool wrap);
     bool eof() const;
 
     void read_batch(SparseBatch &batch);
 
+private:
     void decode_entry(TrainingEntry &e);
     Piece decode_piece();
 
     void fetch_data();
 
-private:
+    void handle_eof();
+
     std::istream &is_;
     std::vector<uint8_t> buffer_;
     BitReader reader_;
@@ -51,6 +54,7 @@ private:
     std::vector<TrainingEntry> entries_;
 
     bool eof_{false};
+    bool wrap_{true};
 };
 
 #endif
