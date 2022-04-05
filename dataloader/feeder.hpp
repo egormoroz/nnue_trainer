@@ -5,7 +5,20 @@
 #include "stream.hpp"
 #include "batch.hpp"
 
-#define DLL_EXPORT __declspec(dllexport)
+#if defined(_MSC_VER)
+    //  Microsoft 
+    #define EXPORT __declspec(dllexport)
+    #define IMPORT __declspec(dllimport)
+#elif defined(__GNUC__)
+    //  GCC
+    #define EXPORT __attribute__((visibility("default")))
+    #define IMPORT
+#else
+    //  do nothing and hope for the best?
+    #define EXPORT
+    #define IMPORT
+    #pragma warning Unknown dynamic link import/export semantics.
+#endif
 
 
 struct BinWriter {
@@ -24,16 +37,26 @@ struct BinReader {
     SparseBatch batch;
 };
 
-extern "C" DLL_EXPORT BinWriter* binwriter_new(const char* file);
-extern "C" DLL_EXPORT BinReader* binreader_new(const char* file);
+struct Features {
+    int n_wfts{}, n_bfts{};
+    float stm{};
+    int wft_indices[MAX_ACTIVE_FEATURES],
+        bft_indices[MAX_ACTIVE_FEATURES];
+};
 
-extern "C" DLL_EXPORT void delete_binwriter(BinWriter*);
-extern "C" DLL_EXPORT void delete_binreader(BinReader*);
+extern "C" EXPORT BinWriter* binwriter_new(const char* file);
+extern "C" EXPORT BinReader* binreader_new(const char* file);
 
-extern "C" DLL_EXPORT int write_entry(BinWriter *writer,
+extern "C" EXPORT void delete_binwriter(BinWriter*);
+extern "C" EXPORT void delete_binreader(BinReader*);
+
+extern "C" EXPORT int write_entry(BinWriter *writer,
     const char *fen, int score, int result);
-extern "C" DLL_EXPORT int next_batch(BinReader *reader);
+extern "C" EXPORT int next_batch(BinReader *reader);
 
-extern "C" DLL_EXPORT SparseBatch* get_batch(BinReader *reader);
+extern "C" EXPORT SparseBatch* get_batch(BinReader *reader);
+
+extern "C" EXPORT Features* get_features(const char *fen);
+extern "C" EXPORT void destroy_features(Features *fts);
 
 #endif

@@ -74,12 +74,7 @@ async def analyze_pgn(e_path, pgn, limit, writer) -> None:
     transport, engine = await chess.engine.popen_uci(e_path)
     game = chess.pgn.read_game(pgn)
     while game is not None:
-        try:
-            await analyze_game(engine, game, limit, writer)
-        except:
-            transport.kill()
-            transport, engine = await chess.engine.popen_uci(e_path)
-
+        await analyze_game(engine, game, limit, writer)
         game = chess.pgn.read_game(pgn)
 
 
@@ -91,7 +86,7 @@ async def main() -> None:
     limit = chess.engine.Limit(time=0.5, depth=12)
     workers = [
         analyze_pgn('saturn.exe', pgn, limit, writer)
-        for _ in range(1)
+        for _ in range(8)
     ]
     await asyncio.gather(*workers)
 

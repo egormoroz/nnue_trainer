@@ -111,13 +111,17 @@ void IStream::read_batch(SparseBatch &batch) {
         decode_entry(e);
         if (!e.num_pieces) {
             handle_eof();
-            if (eof_)
-                break;
+            break;
         }
 
         entries_.push_back(e);
     }
     batch.fill(entries_.data(), entries_.size());
+    ++batch_nb_;
+}
+
+int IStream::num_processed_batches() const {
+    return batch_nb_;
 }
 
 void IStream::decode_entry(TrainingEntry &e) {
@@ -178,11 +182,14 @@ void IStream::fetch_data() {
 }
 
 void IStream::handle_eof() {
+    batch_nb_ = 0;
     eof_ = true;
-    if (!wrap_ || !reader_.cursor)
+    if (!wrap_)
         return;
 
+    is_.clear();
     is_.seekg(0, is_.beg);
+    
     is_.read((char*)buffer_.data(), buffer_.size());
     reader_.cursor = 0;
     eof_ = false;

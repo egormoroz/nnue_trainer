@@ -49,25 +49,13 @@ constexpr UWU uwu[] = {
 };
 
 int main() {
-    {
-        ofstream fout("out.bin", ios::binary);
-        OStream os(fout);
+    SparseBatch sb;
+    ifstream fin("out.bin", ios::binary);
+    IStream is(fin);
 
-        Board b;
-        for (auto &i : uwu) {
-            assert(parse_fen(i.fen, b));
-            os.write_entry(i.score, b.stm, b.mask, b.pieces, b.n_pieces);
-        }
-    }
-
-    {
-        SparseBatch sb;
-        ifstream fin("out.bin", ios::binary);
-        IStream is(fin);
-
+    for (int i = 0; i < 100; ++i) {
         is.read_batch(sb);
+        cout << is.num_processed_batches() << "\n";
     }
-
-    printf("done\n");
 }
 

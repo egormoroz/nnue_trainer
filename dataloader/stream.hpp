@@ -26,7 +26,7 @@ struct OStream {
 
 private:
     std::ostream &os_;
-    uint8_t buffer_[1024];
+    uint8_t buffer_[10240];
     BitWriter writer_;
 };
 
@@ -38,6 +38,8 @@ struct IStream {
     bool eof() const;
 
     void read_batch(SparseBatch &batch);
+
+    int num_processed_batches() const;
 
 private:
     void decode_entry(TrainingEntry &e);
@@ -55,6 +57,7 @@ private:
 
     bool eof_{false};
     bool wrap_{true};
+    int batch_nb_{};
 };
 
 #endif

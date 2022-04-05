@@ -1,7 +1,7 @@
 import ctypes as ct
 import atexit
 
-BATCH_SIZE = 2048
+BATCH_SIZE = 32768
 MAX_ACTIVE_FEATURES = 32
 
 class SparseBatch(ct.Structure):
@@ -18,6 +18,17 @@ class SparseBatch(ct.Structure):
             ct.c_int * (BATCH_SIZE * MAX_ACTIVE_FEATURES * 2)),
         ('bft_indices', 
             ct.c_int * (BATCH_SIZE * MAX_ACTIVE_FEATURES * 2)),
+    ]
+
+
+class Features(ct.Structure):
+    _fields_ = [
+        ('n_wfts', ct.c_int),
+        ('n_bfts', ct.c_int),
+
+        ('stm', ct.c_float),
+        ('wft_indices', ct.c_int * MAX_ACTIVE_FEATURES),
+        ('bft_indices', ct.c_int * MAX_ACTIVE_FEATURES),
     ]
 
 
@@ -46,6 +57,12 @@ def load_dll(dll_path: str):
     dll.get_batch.argtypes = (ct.c_void_p,)
     dll.get_batch.restype = ct.POINTER(SparseBatch)
 
+    dll.get_features.argtypes = (ct.c_char_p,)
+    dll.get_features.restype = ct.POINTER(Features)
+
+    dll.destroy_features.argtypes = (ct.POINTER(Features),)
+    dll.destroy_features.restype = None
+
     return dll
 
 
@@ -71,10 +88,10 @@ class BinReader:
         self.reader = self.dll.binreader_new(path)
         atexit.register(self.cleanup)
 
-    def get_batch(self):
+    def get_batch(self) -> SparseBatch:
         return self.dll.get_batch(self.reader).contents
 
-    def next_batch(self):
+    def next_batch(self) -> int:
         return self.dll.next_batch(self.reader)
 
     def cleanup(self):
