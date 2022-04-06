@@ -120,6 +120,12 @@ constexpr uint16_t halfkp_idx(int ksq, int psq, int pt, int c) {
     );
 }
 
+constexpr uint16_t halfkp_idx2(int ksq, int psq, Piece p) {
+    return static_cast<uint16_t>(
+        (ksq * 64 + psq) * 10 + p
+    );
+}
+
 constexpr int MAX_ACTIVE_FEATURES = 32;
 constexpr int MAX_FEATURE_INDEX = 40960 - 1;
 

@@ -1,10 +1,12 @@
-from ffi import *
 import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
 import os
 from ranger21 import Ranger21
+
+from ffi import *
+from dataset import *
 
 NUM_FEATURES = 40960
 SCALE = 500.0
@@ -84,18 +86,6 @@ class NNUE(nn.Module):
 
 
 def loss_fn(lambda_, pred, w, b, stm, score, outcome):
-    # q = pred
-    # t = outcome
-    # p = (score / SCALE).sigmoid()
-    # epsilon = 1e-12
-    # teacher_entropy = -(p * (p + epsilon).log() + (1.0 - p) * (1.0 - p + epsilon).log())
-    # outcome_entropy = -(t * (t + epsilon).log() + (1.0 - t) * (1.0 - t + epsilon).log())
-    # teacher_loss = -(p * F.logsigmoid(q) + (1.0 - p) * F.logsigmoid(-q))
-    # outcome_loss = -(t * F.logsigmoid(q) + (1.0 - t) * F.logsigmoid(-q))
-    # result  = lambda_ * teacher_loss    + (1.0 - lambda_) * outcome_loss
-    # entropy = lambda_ * teacher_entropy + (1.0 - lambda_) * outcome_entropy
-    # loss = result.mean() - entropy.mean()
-    # return loss
     target = (score / SCALE).sigmoid()
     return ((pred - target) ** 2).mean()
 
@@ -123,52 +113,36 @@ def eval_fen(dll, fen, model):
 
 
 def main():
-    # nnue = NNUE()
-    # dll = load_dll('./my_dll.dll')
-    # fts = dll.get_features('6k1/2R2p1p/6p1/1P6/8/8/2P2KPP/1r6 w - - 5 36'.encode('utf-8'))
-    # w, b, stm = get_entry_tensors(fts.contents)
-    # nnue.load_state_dict(torch.load('state.pt'))
-
-    # with torch.no_grad():
-    #     score = nnue.forward(w, b, stm).logit().item() * SCALE
-    # print(score)
-
-
     dll = load_dll('./my_dll.dll')
-    r = BinReader(dll, '37540_games.bin')
+    dataset = SparseBatchDataset(dll, '37540_games.bin')
+    num_epochs = 100
 
     nnue = NNUE()
     # optimizer = torch.optim.Adam(nnue.parameters(), lr=0.01)
-    optimizer = Ranger21(nnue.parameters(), lr=0.001, 
-            num_epochs=100, num_batches_per_epoch=84)
+    optimizer = Ranger21(nnue.parameters(), lr=0.01, 
+            num_epochs=num_epochs, num_batches_per_epoch=84)
 
-    if os.path.isfile('state.pt'):
-        nnue.load_state_dict(torch.load('state.pt'))
+    # if os.path.isfile('state.pt'):
+    #     nnue.load_state_dict(torch.load('state.pt', 
+    #         map_location=torch.device('cpu')))
 
-    batch = r.get_batch()
-    n = r.next_batch()
-    nb_batches = 0
-    epoch = 0
-    mean_loss = 0
-    while n != 0 and epoch < 100:
-        loss = train_step(nnue, batch, optimizer)
-        mean_loss += loss
+    n = 0
+    for epoch in range(num_epochs):
+        mean_loss = 0
+        for i, batch in enumerate(dataset):
+            assert batch is not None
 
-        if n % 10 == 0:
-            print(f'epoch: {epoch:2}, batch: {n:4}/{nb_batches},',
-                  f'pos: {BATCH_SIZE * n:8}, loss: {loss:.4f}', end='\r')
+            loss = train_step(nnue, batch, optimizer)
+            mean_loss += loss
 
-        old_n = n
-        n = r.next_batch()
-        if n < old_n:
-            mean_loss /= old_n
-            print(f'epoch {epoch}, mean loss {mean_loss:.4f}', ' ' * 64)
+            print(f'epoch: {epoch:2}, batch: {i:4}/{n},',
+                  f'pos: {BATCH_SIZE * i:8}, loss: {loss:.4f}', end='\r')
+        n = i + 1
 
-            mean_loss = 0
-            nb_batches = old_n
-            epoch += 1
-            torch.save(nnue.state_dict(), 'state.pt')
-    
+        mean_loss /= n
+        print(f'epoch {epoch}, mean loss {mean_loss:.4f}', ' ' * 64)
+        torch.save(nnue.state_dict(), 'state.pt')
+
 
 if __name__ == '__main__':
     main()

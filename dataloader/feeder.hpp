@@ -56,6 +56,8 @@ extern "C" EXPORT int next_batch(BinReader *reader);
 
 extern "C" EXPORT SparseBatch* get_batch(BinReader *reader);
 
+extern "C" EXPORT int reset_binreader(BinReader* reader);
+
 extern "C" EXPORT Features* get_features(const char *fen);
 extern "C" EXPORT void destroy_features(Features *fts);
 

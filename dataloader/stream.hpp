@@ -36,13 +36,14 @@ struct IStream {
 
     void set_wrap(bool wrap);
     bool eof() const;
+    void reset();
 
     void read_batch(SparseBatch &batch);
+    void decode_entry(TrainingEntry &e);
 
     int num_processed_batches() const;
 
 private:
-    void decode_entry(TrainingEntry &e);
     Piece decode_piece();
 
     void fetch_data();
@@ -56,7 +57,7 @@ private:
     std::vector<TrainingEntry> entries_;
 
     bool eof_{false};
-    bool wrap_{true};
+    bool wrap_{false};
     int batch_nb_{};
 };
 

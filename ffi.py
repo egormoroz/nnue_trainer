@@ -63,6 +63,9 @@ def load_dll(dll_path: str):
     dll.destroy_features.argtypes = (ct.POINTER(Features),)
     dll.destroy_features.restype = None
 
+    dll.reset_binreader.argtypes = (ct.c_void_p,)
+    dll.reset_binreader.restype = ct.c_int
+
     return dll
 
 
@@ -93,6 +96,9 @@ class BinReader:
 
     def next_batch(self) -> int:
         return self.dll.next_batch(self.reader)
+
+    def reset(self) -> int:
+        return self.dll.reset_binreader(self.reader)
 
     def cleanup(self):
         self.dll.delete_binreader(self.reader)

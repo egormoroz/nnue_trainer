@@ -58,6 +58,13 @@ SparseBatch* get_batch(BinReader *reader) {
     return &reader->batch;
 }
 
+int reset_binreader(BinReader* reader) {
+    if (!reader->fin.is_open())
+        return 0;
+    reader->is.reset();
+    return 1;
+}
+
 static void add_indices(const Board &b, int *indices, 
         int &n, int ksq) 
 {

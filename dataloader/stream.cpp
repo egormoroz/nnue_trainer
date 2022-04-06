@@ -99,6 +99,15 @@ void IStream::set_wrap(bool wrap) { wrap_ = wrap; }
 
 bool IStream::eof() const { return eof_; }
 
+void IStream::reset() {
+    is_.clear();
+    is_.seekg(0, is_.beg);
+    
+    is_.read((char*)buffer_.data(), buffer_.size());
+    reader_.cursor = 0;
+    eof_ = false;
+}
+
 void IStream::read_batch(SparseBatch &batch) {
     batch.size = 0;
 
@@ -153,16 +162,13 @@ void IStream::decode_entry(TrainingEntry &e) {
 Piece IStream::decode_piece() {
     Color c = Color(reader_.read_bit());
     uint8_t code = 0;
-    do {
-        code |= reader_.read_bit();
 
+    while(true) {
+        code |= reader_.read_bit();
         if (huffman::d_table[code] != NONE)
             return make_piece(c, huffman::d_table[code]);
         code <<= 1;
-    } while (code < 16);
-
-    assert(false);
-    return W_NONE;
+    }
 }
 
 void IStream::fetch_data() {
@@ -187,11 +193,6 @@ void IStream::handle_eof() {
     if (!wrap_)
         return;
 
-    is_.clear();
-    is_.seekg(0, is_.beg);
-    
-    is_.read((char*)buffer_.data(), buffer_.size());
-    reader_.cursor = 0;
-    eof_ = false;
+    reset();
 }
 

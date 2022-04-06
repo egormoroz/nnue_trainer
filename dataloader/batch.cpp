@@ -7,22 +7,29 @@ namespace {
 void add_features(const TrainingEntry &e, int sample_idx,
         int *features, int &features_nb, int ksq)
 {
-    int indices[MAX_ACTIVE_FEATURES];
-    for (int i = 0; i < e.num_pieces; ++i) {
+    /* int indices[MAX_ACTIVE_FEATURES]; */
+    /* for (int i = 0; i < e.num_pieces; ++i) { */
+    /*     Piece p = e.piece[i]; */
+    /*     int psq = e.piece_sq[i]; */
+    /*     indices[i] = halfkp_idx(ksq, psq, */ 
+    /*             type_of(p), color_of(p)); */
+    /* } */
+
+    /* std::sort(indices, indices + e.num_pieces); */
+
+    /* for (int i = 0; i < e.num_pieces; ++i) { */
+    /*     features[features_nb * 2] = sample_idx; */
+    /*     features[features_nb * 2 + 1] = indices[i]; */
+    /*     ++features_nb; */
+    /* } */
+
+    for (int i = 0;i  < e.num_pieces; ++i) {
         Piece p = e.piece[i];
         int psq = e.piece_sq[i];
-        indices[i] = halfkp_idx(ksq, psq, 
-                type_of(p), color_of(p));
-    }
-
-    std::sort(indices, indices + e.num_pieces);
-
-    for (int i = 0; i < e.num_pieces; ++i) {
         features[features_nb * 2] = sample_idx;
-        features[features_nb * 2 + 1] = indices[i];
+        features[features_nb * 2 + 1] = halfkp_idx2(ksq, psq, p);
         ++features_nb;
     }
-
 }
 
 } //namespace
