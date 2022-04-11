@@ -1,4 +1,5 @@
 #include "fen.hpp"
+#include <cstring>
 
 bool parse_fen(std::string_view fen, Board &b) {
     b.n_pieces = 0;

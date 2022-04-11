@@ -71,12 +71,11 @@ static void add_indices(const Board &b, int *indices,
     uint64_t mask = b.mask;
     for (int i = 0; i < b.n_pieces; ++i) {
         Piece p = b.pieces[i];
-        PieceType pt = type_of(p);
-        Color c = color_of(p);
-        if (pt == KING) continue;
-
         int psq = pop_lsb(mask);
-        indices[n++] = halfkp_idx(ksq, psq, pt, c);
+
+        if (type_of(p) == KING) continue;
+
+        indices[n++] = halfkp_idx2(ksq, psq, p);
     }
 
     std::sort(indices, indices + n);

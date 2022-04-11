@@ -120,11 +120,11 @@ def main():
     nnue = NNUE()
     # optimizer = torch.optim.Adam(nnue.parameters(), lr=0.01)
     optimizer = Ranger21(nnue.parameters(), lr=0.01, 
-            num_epochs=num_epochs, num_batches_per_epoch=84)
+            num_epochs=num_epochs, num_batches_per_epoch=348)
 
-    # if os.path.isfile('state.pt'):
-    #     nnue.load_state_dict(torch.load('state.pt', 
-    #         map_location=torch.device('cpu')))
+    if os.path.isfile('state2.pt'):
+        nnue.load_state_dict(torch.load('state2.pt', 
+            map_location=torch.device('cpu')))
 
     n = 0
     for epoch in range(num_epochs):
