@@ -122,6 +122,9 @@ def train_step(nnue: NNUE, batch: SparseBatch, optimizer, device):
     optimizer.step()
     nnue.zero_grad()
 
+    with torch.no_grad():
+        nnue.clip_weights()
+
     return loss.item()
 
 
