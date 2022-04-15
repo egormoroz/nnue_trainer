@@ -3,6 +3,8 @@
 #include "stream.hpp"
 #include <memory>
 #include <chrono>
+#include <vector>
+#include <numeric>
 #include "batchstream.hpp"
 
 using namespace std;
@@ -19,15 +21,5 @@ int64_t time_it(F &&f) {
 }
 
 int main() {
-    unique_ptr<SparseBatch> sb(new SparseBatch);
-    BatchStream s("games.bin");
-
-    size_t i = 0;
-    for (int epoch = 0; epoch < 100; ++epoch) {
-        while (s.next_batch(*sb)) {
-            cout << (i++) << "\n";
-        }
-        s.reset();
-    }
 }
 

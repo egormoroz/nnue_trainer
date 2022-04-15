@@ -5,7 +5,7 @@
 #include "entry.hpp"
 
 struct SparseBatch {
-    static constexpr int MAX_SIZE = 32768;
+    static constexpr int MAX_SIZE = 32768 * 8;
 
     void fill(const TrainingEntry *entries, int n_entries);
 

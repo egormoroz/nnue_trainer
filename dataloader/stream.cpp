@@ -92,6 +92,7 @@ IStream::IStream(std::istream &is)
       reader_{ buffer_.data(), 0 }
 {
     is_.read((char*)buffer_.data(), buffer_.size());
+    entries_.reserve(SparseBatch::MAX_SIZE);
 }
 
 bool IStream::eof() const { return eof_; }
@@ -131,6 +132,8 @@ int IStream::num_processed_batches() const {
 }
 
 void IStream::decode_entry(TrainingEntry &e) {
+    memset(&e, 0, sizeof(e));
+
     e.score = static_cast<int16_t>(reader_.read16());
 
     e.result = static_cast<GameResult>(

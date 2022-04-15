@@ -1,7 +1,7 @@
 import ctypes as ct
 import atexit
 
-BATCH_SIZE = 32768
+BATCH_SIZE = 32768 * 8
 MAX_ACTIVE_FEATURES = 32
 
 class SparseBatch(ct.Structure):

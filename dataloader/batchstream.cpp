@@ -1,5 +1,6 @@
 #include "batchstream.hpp"
 #include <chrono>
+#include <cstring>
 
 namespace huffman {
 
@@ -20,7 +21,7 @@ constexpr PieceType d_table[] = {
 }
 
 constexpr int N = SparseBatch::MAX_SIZE * TrainingEntry::MAX_COMPRESSED_SIZE;
-constexpr size_t PREFETCH_NB = 4;
+constexpr size_t PREFETCH_NB = 8;
 
 BatchStream::BatchStream(const char *file)
     : fin_(file, std::ios::binary),
@@ -38,6 +39,7 @@ void BatchStream::reset() {
     {
         std::lock_guard<std::mutex> lock(mtx_);
         reset_ = true;
+        eof_ = false;
     }
     cv_.notify_one();
 }
@@ -58,8 +60,8 @@ bool BatchStream::next_batch(SparseBatch &batch) {
 
             lock.lock();
 
-            if (eof_) return false;
             if (!batches_.empty()) break;
+            if (eof_) return false;
 
             lock.unlock();
         }
@@ -86,16 +88,20 @@ void BatchStream::worker_routine() {
         size_t n = batch_buf.size();
         batch_buf.resize(PREFETCH_NB);
 
-        for (size_t i = n; i < PREFETCH_NB; ++i, ++n) {
-            if (!read_batch(batch_buf[i]))
+        for (size_t i = n; i < PREFETCH_NB; ++i) {
+            read_batch(batch_buf[i]);
+
+            int size = batch_buf[i].size;
+            n += size != 0;
+            if (!size)
                 break;
         }
+        batch_buf.resize(n);
 
         std::unique_lock<std::mutex> lock(mtx_);
         if (!n) eof_ = true;
         cv_.wait(lock, [&]() {
-            return quit_ || reset_ 
-                || (batches_.empty() && n);
+            return quit_ || reset_ || batches_.size() < n;
         });
 
         if (quit_)
@@ -103,13 +109,11 @@ void BatchStream::worker_routine() {
 
         if (reset_) {
             reset_ = false;
-            batch_buf.clear();
             fin_.clear();
             fin_.seekg(0, fin_.beg);
             
             fin_.read((char*)buffer_.data(), buffer_.size());
             reader_.cursor = 0;
-            eof_ = false;
 
             batches_.clear();
             batch_buf.clear();
@@ -129,7 +133,7 @@ BatchStream::~BatchStream() {
     worker_.join();
 }
 
-bool BatchStream::read_batch(SparseBatch &batch) {
+void BatchStream::read_batch(SparseBatch &batch) {
     batch.size = 0;
 
     if (reader_.cursor > N * 8)
@@ -145,12 +149,13 @@ bool BatchStream::read_batch(SparseBatch &batch) {
 
         entry_buf_.push_back(e);
     }
-    batch.fill(entry_buf_.data(), entry_buf_.size());
 
-    return batch.size == batch.MAX_SIZE;
+    batch.fill(entry_buf_.data(), entry_buf_.size());
 }
 
 void BatchStream::decode_entry(TrainingEntry &e) {
+    memset(&e, 0, sizeof(e));
+
     e.score = static_cast<int16_t>(reader_.read16());
 
     e.result = static_cast<GameResult>(

@@ -24,7 +24,7 @@ public:
 private:
     void worker_routine();
 
-    bool read_batch(SparseBatch &batch);
+    void read_batch(SparseBatch &batch);
 
     void decode_entry(TrainingEntry &e);
     Piece decode_piece();
