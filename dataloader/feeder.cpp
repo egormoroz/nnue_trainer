@@ -15,17 +15,15 @@ BinWriter* binwriter_new(const char* file) {
     return new BinWriter(file);
 }
 
-BinReader* binreader_new(const char* file) {
-    return new BinReader(file);
+BatchStream* batchstream_new(const char* file) {
+    return new BatchStream(file);
 }
 
 void delete_binwriter(BinWriter* w) {
     delete w;
 }
 
-void delete_binreader(BinReader* r) {
-    delete r;
-}
+void delete_batchstream(BatchStream *stream) { delete stream; }
 
 int write_entry(BinWriter *writer, const char *fen, 
         int score, int result) 
@@ -43,27 +41,16 @@ int write_entry(BinWriter *writer, const char *fen,
     return 1;
 }
 
-int next_batch(BinReader *reader) {
-    if (!reader->fin.is_open())
-        return 0;
-    if (reader->is.eof())
-        return 0;
-
-    reader->is.read_batch(reader->batch);
-
-    return reader->is.num_processed_batches();
+int next_batch(BatchStream *stream, SparseBatch *batch) {
+    return stream->next_batch(*batch);
 }
 
-SparseBatch* get_batch(BinReader *reader) {
-    return &reader->batch;
+void reset_batchstream(BatchStream* stream) {
+    stream->reset();
 }
 
-int reset_binreader(BinReader* reader) {
-    if (!reader->fin.is_open())
-        return 0;
-    reader->is.reset();
-    return 1;
-}
+SparseBatch* new_batch() { return new SparseBatch; }
+void destroy_batch(SparseBatch *batch) { delete batch; }
 
 static void add_indices(const Board &b, int *indices, 
         int &n, int ksq) 

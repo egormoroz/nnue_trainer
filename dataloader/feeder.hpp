@@ -4,6 +4,7 @@
 #include <fstream>
 #include "stream.hpp"
 #include "batch.hpp"
+#include "batchstream.hpp"
 
 #if defined(_MSC_VER)
     //  Microsoft 
@@ -45,18 +46,19 @@ struct Features {
 };
 
 extern "C" EXPORT BinWriter* binwriter_new(const char* file);
-extern "C" EXPORT BinReader* binreader_new(const char* file);
-
-extern "C" EXPORT void delete_binwriter(BinWriter*);
-extern "C" EXPORT void delete_binreader(BinReader*);
-
 extern "C" EXPORT int write_entry(BinWriter *writer,
     const char *fen, int score, int result);
-extern "C" EXPORT int next_batch(BinReader *reader);
+extern "C" EXPORT void delete_binwriter(BinWriter*);
 
-extern "C" EXPORT SparseBatch* get_batch(BinReader *reader);
 
-extern "C" EXPORT int reset_binreader(BinReader* reader);
+extern "C" EXPORT BatchStream* batchstream_new(const char* file);
+extern "C" EXPORT void delete_batchstream(BatchStream*);
+extern "C" EXPORT int next_batch(
+    BatchStream *stream, SparseBatch *batch);
+extern "C" EXPORT void reset_batchstream(BatchStream* stream);
+
+extern "C" EXPORT SparseBatch* new_batch();
+extern "C" EXPORT void destroy_batch(SparseBatch *batch);
 
 extern "C" EXPORT Features* get_features(const char *fen);
 extern "C" EXPORT void destroy_features(Features *fts);

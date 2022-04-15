@@ -3,6 +3,7 @@
 #include "stream.hpp"
 #include <memory>
 #include <chrono>
+#include "batchstream.hpp"
 
 using namespace std;
 
@@ -19,18 +20,14 @@ int64_t time_it(F &&f) {
 
 int main() {
     unique_ptr<SparseBatch> sb(new SparseBatch);
-    ifstream fin("37540_games.bin", ios::binary);
-    IStream is(fin);
+    BatchStream s("games.bin");
 
-    int batches = 84 * 12;
-    int64_t millis = time_it([&]() {
-        for (int i = 0; i < batches; ++i)
-            is.read_batch(*sb);
-    });
-
-    int64_t n = SparseBatch::MAX_SIZE;
-    n *= batches;
-    n /= millis;
-    cout << n << "k/s" << endl;
+    size_t i = 0;
+    for (int epoch = 0; epoch < 100; ++epoch) {
+        while (s.next_batch(*sb)) {
+            cout << (i++) << "\n";
+        }
+        s.reset();
+    }
 }
 

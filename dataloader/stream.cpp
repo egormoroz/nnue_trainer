@@ -92,10 +92,7 @@ IStream::IStream(std::istream &is)
       reader_{ buffer_.data(), 0 }
 {
     is_.read((char*)buffer_.data(), buffer_.size());
-    entries_.reserve(SparseBatch::MAX_SIZE);
 }
-
-void IStream::set_wrap(bool wrap) { wrap_ = wrap; }
 
 bool IStream::eof() const { return eof_; }
 
@@ -190,9 +187,5 @@ void IStream::fetch_data() {
 void IStream::handle_eof() {
     batch_nb_ = 0;
     eof_ = true;
-    if (!wrap_)
-        return;
-
-    reset();
 }
 

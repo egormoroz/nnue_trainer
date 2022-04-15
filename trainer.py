@@ -7,9 +7,10 @@ from ranger21 import Ranger21
 
 from ffi import *
 from dataset import *
+from model import *
 
-NUM_FEATURES = 40960
 SCALE = 500.0
+NNUE_SCALING = 150
 
 def get_tensors(sb: SparseBatch, device):
     stm = np.ctypeslib.as_array(sb.stm)[:sb.size]
@@ -65,52 +66,10 @@ def get_entry_tensors(fts, device):
     return w, b, stm
 
 
-def crelu(x):
-    return torch.clamp(x, 0.0, 1.0)
-
-class NNUE(nn.Module):
-    def __init__(self):
-        super(NNUE, self).__init__()
-
-        self.ft = nn.Linear(NUM_FEATURES, 128)
-        self.l1 = nn.Linear(2 * 128, 32)
-        self.l2 = nn.Linear(32, 32)
-        self.l3 = nn.Linear(32, 1)
-
-        self.weight_clipping = [
-            {'params' : [self.ft.weight], 'min_weight' : -127/64, 'max_weight' : 127/64 },
-            {'params' : [self.l1.weight], 'min_weight' : -127/64, 'max_weight' : 127/64 },
-            {'params' : [self.l2.weight], 'min_weight' : -127/64, 'max_weight' : 127/64 },
-            {'params' : [self.l3.weight], 'min_weight' : -127*127/9600, 'max_weight' : 127*127/9600 },
-        ]
-
-    def clip_weights(self):
-        for group in self.weight_clipping:
-            for p in group['params']:
-                p_data_fp32 = p.data
-                min_weight = group['min_weight']
-                max_weight = group['max_weight']
-                p_data_fp32.clamp_(min_weight, max_weight)
-                p.data.copy_(p_data_fp32)
-
-    def forward(self, wfts, bfts, stm):
-        w = self.ft(wfts)
-        b = self.ft(bfts)
-
-        accumulator = stm * torch.cat([w, b], dim=1)
-        accumulator += (1 - stm) * torch.cat([b, w], dim=1)
-
-        x = crelu(accumulator)
-        x = crelu(self.l1(x))
-        x = crelu(self.l2(x))
-        x = self.l3(x)
-
-        return x
-
-
 def loss_fn(lambda_, pred, w, b, stm, score, outcome):
-    target = (score / SCALE).sigmoid()
-    return ((pred - target) ** 2).mean()
+    p = (pred * NNUE_SCALING / SCALE).sigmoid()
+    q = (score / SCALE).sigmoid()
+    return torch.pow(torch.abs(p - q), 2.6).mean()
 
 
 def train_step(nnue: NNUE, batch: SparseBatch, optimizer, device):
@@ -128,9 +87,9 @@ def train_step(nnue: NNUE, batch: SparseBatch, optimizer, device):
     return loss.item()
 
 
-def eval_fen(dll, fen, model):
+def eval_fen(dll, fen, model, device):
     fts = dll.get_features(fen.encode('utf-8'))
-    w, b, stm = get_entry_tensors(fts.contents)
+    w, b, stm = get_entry_tensors(fts.contents, device)
     with torch.no_grad():
         score = model.forward(w, b, stm).logit(eps=1e-6).item() * SCALE
 
@@ -159,7 +118,7 @@ def main():
     training_dataset = SparseBatchDataset(dll, 'games.bin')
     validation_dataset = SparseBatchDataset(dll, 'validation.bin')
 
-    num_epochs = 100
+    num_epochs = 2
 
     if torch.cuda.is_available():
         device = torch.device('cuda')
@@ -170,8 +129,10 @@ def main():
     # optimizer = torch.optim.Adam(nnue.parameters(), lr=0.01)
     optimizer = Ranger21(nnue.parameters(), lr=0.01, 
             num_epochs=num_epochs, num_batches_per_epoch=348)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='min', factor=0.1, patience=1, verbose=True, min_lr=1e-6)
 
-    saved_path = '256_32_32_32.pt'
+    saved_path = 'asdf.pt'
     best_val_loss = 1.0
     if os.path.isfile(saved_path):
         try:
@@ -196,12 +157,14 @@ def main():
 
         train_loss /= n
         val_loss = calculate_validation_loss(nnue, validation_dataset, device)
+        scheduler.step(val_loss)
 
-        printf(f'epoch {epoch}, training loss {train_loss:.4f}',
+        print(f'epoch {epoch}, training loss {train_loss:.4f}',
                 f'validation loss {val_loss:.4f}', ' ' * 64)
 
         if val_loss < best_val_loss:
-            torch.save(nnue.state_dict(), saved_path)
+            best_val_loss = val_loss
+            # torch.save(nnue.state_dict(), saved_path)
 
 
 if __name__ == '__main__':

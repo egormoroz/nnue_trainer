@@ -3,6 +3,7 @@
 
 #include <iosfwd>
 #include <vector>
+
 #include "bitutil.hpp"
 #include "batch.hpp"
 
@@ -30,11 +31,9 @@ private:
     BitWriter writer_;
 };
 
-
 struct IStream {
     IStream(std::istream &is);
 
-    void set_wrap(bool wrap);
     bool eof() const;
     void reset();
 
@@ -50,15 +49,16 @@ private:
 
     void handle_eof();
 
+
     std::istream &is_;
     std::vector<uint8_t> buffer_;
     BitReader reader_;
 
-    std::vector<TrainingEntry> entries_;
 
     bool eof_{false};
-    bool wrap_{false};
     int batch_nb_{};
+
+    std::vector<TrainingEntry> entries_;
 };
 
 #endif

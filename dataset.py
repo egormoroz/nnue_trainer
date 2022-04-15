@@ -2,24 +2,24 @@ from ffi import *
 import torch
 
 class SparseBatchIter:
-    def __init__(self, reader: BinReader):
-        self.reader = reader
-        self.reader.reset()
+    def __init__(self, stream: BatchStream):
+        self.stream = stream
+        self.stream.reset()
 
     def __iter__(self):
         return self
 
     def __next__(self) -> SparseBatch:
-        if self.reader.next_batch() == 0:
+        if self.stream.next_batch() == 0:
             raise StopIteration
-        return self.reader.get_batch()
+        return self.stream.get_batch()
 
 
 class SparseBatchDataset(torch.utils.data.IterableDataset):
     def __init__(self, dll, filepath):
-        self.reader = BinReader(dll, filepath)
+        self.stream = BatchStream(dll, filepath)
 
     def __iter__(self):
-        return SparseBatchIter(self.reader)
+        return SparseBatchIter(self.stream)
 
 

@@ -21,6 +21,9 @@ class SparseBatch(ct.Structure):
     ]
 
 
+SparseBatchPtr = ct.POINTER(SparseBatch)
+
+
 class Features(ct.Structure):
     _fields_ = [
         ('n_wfts', ct.c_int),
@@ -38,24 +41,33 @@ def load_dll(dll_path: str):
     dll.binwriter_new.argtypes = (ct.c_char_p,)
     dll.binwriter_new.restype = ct.c_void_p
 
-    dll.binreader_new.argtypes = (ct.c_char_p,)
-    dll.binreader_new.restype = ct.c_void_p
-
     dll.delete_binwriter.argtypes = (ct.c_void_p,)
     dll.delete_binwriter.restype = None
-
-    dll.delete_binreader.argtypes = (ct.c_void_p,)
-    dll.delete_binreader.restype = None
 
     dll.write_entry.argtypes = (ct.c_void_p, ct.c_char_p,
             ct.c_int, ct.c_int)
     dll.write_entry.restype = ct.c_int
 
-    dll.next_batch.argtypes = (ct.c_void_p,)
+
+    dll.batchstream_new.argtypes = (ct.c_char_p,)
+    dll.batchstream_new.restype = ct.c_void_p
+
+    dll.delete_batchstream.argtypes = (ct.c_void_p,)
+    dll.delete_batchstream.restype = None
+
+    dll.next_batch.argtypes = (ct.c_void_p, SparseBatchPtr)
     dll.next_batch.restype = ct.c_int
 
-    dll.get_batch.argtypes = (ct.c_void_p,)
-    dll.get_batch.restype = ct.POINTER(SparseBatch)
+    dll.reset_batchstream.argtypes = (ct.c_void_p,)
+    dll.reset_batchstream.restype = None
+
+
+    dll.new_batch.argtypes = None
+    dll.new_batch.restype = SparseBatchPtr
+
+    dll.destroy_batch.argtypes = (SparseBatchPtr,)
+    dll.destroy_batch.restype = None
+
 
     dll.get_features.argtypes = (ct.c_char_p,)
     dll.get_features.restype = ct.POINTER(Features)
@@ -63,8 +75,6 @@ def load_dll(dll_path: str):
     dll.destroy_features.argtypes = (ct.POINTER(Features),)
     dll.destroy_features.restype = None
 
-    dll.reset_binreader.argtypes = (ct.c_void_p,)
-    dll.reset_binreader.restype = ct.c_int
 
     return dll
 
@@ -84,22 +94,27 @@ class BinWriter:
         return self.dll.write_entry(self.writer, fen, score, result)
 
 
-class BinReader:
+class BatchStream:
     def __init__(self, dll, file_path: str):
+        file_path = file_path.encode('utf-8')
+
         self.dll = dll
-        path = file_path.encode('utf-8')
-        self.reader = self.dll.binreader_new(path)
+        self.stream = dll.batchstream_new(file_path)
+        self.batch = dll.new_batch()
+
         atexit.register(self.cleanup)
 
     def get_batch(self) -> SparseBatch:
-        return self.dll.get_batch(self.reader).contents
+        return self.batch.contents
 
     def next_batch(self) -> int:
-        return self.dll.next_batch(self.reader)
+        return self.dll.next_batch(self.stream, self.batch)
 
-    def reset(self) -> int:
-        return self.dll.reset_binreader(self.reader)
+    def reset(self):
+        self.dll.reset_batchstream(self.stream)        
 
     def cleanup(self):
-        self.dll.delete_binreader(self.reader)
+        self.dll.delete_batchstream(self.stream)
+        self.dll.destroy_batch(self.batch)
+
 
