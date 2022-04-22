@@ -8,6 +8,7 @@
 
 #include "bitutil.hpp"
 #include "batch.hpp"
+#include "stream.hpp"
 
 
 class BatchStream {
@@ -23,20 +24,11 @@ public:
 
 private:
     void worker_routine();
-
     void read_batch(SparseBatch &batch);
 
-    void decode_entry(TrainingEntry &e);
-    Piece decode_piece();
-
-    void fetch_data();
-
-
     std::ifstream fin_;
-    std::vector<uint8_t> buffer_;
-    BitReader reader_;
+    IStream is_;
     std::vector<TrainingEntry> entry_buf_;
-
 
     std::thread worker_;
     std::mutex mtx_;

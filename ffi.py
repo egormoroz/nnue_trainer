@@ -48,6 +48,9 @@ def load_dll(dll_path: str):
             ct.c_int, ct.c_int)
     dll.write_entry.restype = ct.c_int
 
+    dll.binwriter_get_hash.argtypes = (ct.c_void_p,)
+    dll.binwriter_get_hash.restype = ct.c_uint64
+
 
     dll.batchstream_new.argtypes = (ct.c_char_p,)
     dll.batchstream_new.restype = ct.c_void_p
@@ -76,6 +79,9 @@ def load_dll(dll_path: str):
     dll.destroy_features.restype = None
 
 
+    dll.bin_comp_hash.argtypes = (ct.c_char_p,)
+    dll.bin_comp_hash.restype = ct.c_uint64
+
     return dll
 
 
@@ -85,6 +91,9 @@ class BinWriter:
         path = file_path.encode('utf-8')
         self.writer = self.dll.binwriter_new(path)
         atexit.register(self.cleanup)
+
+    def get_hash(self) -> int:
+        return self.dll.binwriter_get_hash(self.writer)
 
     def cleanup(self):
         self.dll.delete_binwriter(self.writer)

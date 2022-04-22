@@ -6,6 +6,7 @@
 
 #include "bitutil.hpp"
 #include "batch.hpp"
+#include "fen.hpp"
 
 struct OStream {
     OStream(std::ostream &os);
@@ -13,8 +14,8 @@ struct OStream {
     //pieces must be sorted by square (from A1 to H8)
     //popcnt(mask) == n_pieces
     //Dumps the buffer automatically
-    void write_entry(int16_t score, Color stm, uint64_t mask, 
-            const Piece *pieces, int n_pieces, GameResult result);
+    void write_entry(int16_t score, const Board &b, 
+            GameResult result);
 
     //dumps the bytes of the buffer to the ostream
     //NB: doesn't write the last byte if it's incomplete
@@ -31,34 +32,22 @@ private:
     BitWriter writer_;
 };
 
-struct IStream {
+class IStream {
+public:
     IStream(std::istream &is);
 
-    bool eof() const;
-    void reset();
-
-    void read_batch(SparseBatch &batch);
+    void fetch_data_lazily();
+    
     void decode_entry(TrainingEntry &e);
-
-    int num_processed_batches() const;
+    void reset();
 
 private:
     Piece decode_piece();
 
-    void fetch_data();
-
-    void handle_eof();
-
-
     std::istream &is_;
+
     std::vector<uint8_t> buffer_;
     BitReader reader_;
-
-
-    bool eof_{false};
-    int batch_nb_{};
-
-    std::vector<TrainingEntry> entries_;
 };
 
 #endif

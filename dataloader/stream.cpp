@@ -36,15 +36,14 @@ constexpr PieceType d_table[] = {
 } //namespace huffman
 
 
-
 OStream::OStream(std::ostream &os)
     : os_(os), writer_ { &buffer_[0], 0 } 
 {
     memset(buffer_, 0, sizeof(buffer_));
 }
 
-void OStream::write_entry(int16_t score, Color stm, uint64_t mask, 
-        const Piece *pieces, int n_pieces, GameResult result) 
+void OStream::write_entry(int16_t score, const Board &b, 
+        GameResult result) 
 {
     if (writer_.cursor > (sizeof(buffer_) - 32) * 8)
         flush();
@@ -52,11 +51,11 @@ void OStream::write_entry(int16_t score, Color stm, uint64_t mask,
     writer_.write(score);
     writer_.write_bit(result);
     writer_.write_bit(result >> 1);
-    writer_.write_bit(stm);
-    writer_.write(mask);
+    writer_.write_bit(b.stm);
+    writer_.write(b.mask);
 
-    for (int i = 0; i < n_pieces; ++i) {
-        Piece p = pieces[i];
+    for (int i = 0; i < b.n_pieces; ++i) {
+        Piece p = b.pieces[i];
         auto &encoding = huffman::e_table[type_of(p)];
 
         writer_.write_bit(color_of(p));
@@ -85,50 +84,14 @@ OStream::~OStream() {
         flush_padded();
 }
 
+
 constexpr int N = SparseBatch::MAX_SIZE * TrainingEntry::MAX_COMPRESSED_SIZE;
 
-IStream::IStream(std::istream &is) 
-    : is_(is), buffer_(N * 2, 0),
-      reader_{ buffer_.data(), 0 }
+IStream::IStream(std::istream &is)
+    : is_(is), buffer_(N * 2, 0), 
+      reader_{ buffer_.data(), 0 } 
 {
     is_.read((char*)buffer_.data(), buffer_.size());
-    entries_.reserve(SparseBatch::MAX_SIZE);
-}
-
-bool IStream::eof() const { return eof_; }
-
-void IStream::reset() {
-    is_.clear();
-    is_.seekg(0, is_.beg);
-    
-    is_.read((char*)buffer_.data(), buffer_.size());
-    reader_.cursor = 0;
-    eof_ = false;
-}
-
-void IStream::read_batch(SparseBatch &batch) {
-    batch.size = 0;
-
-    if (reader_.cursor > N * 8)
-        fetch_data();
-
-    entries_.clear();
-    TrainingEntry e;
-    for (int i = 0; i < SparseBatch::MAX_SIZE; ++i) {
-        decode_entry(e);
-        if (!e.num_pieces) {
-            handle_eof();
-            break;
-        }
-
-        entries_.push_back(e);
-    }
-    batch.fill(entries_.data(), entries_.size());
-    ++batch_nb_;
-}
-
-int IStream::num_processed_batches() const {
-    return batch_nb_;
 }
 
 void IStream::decode_entry(TrainingEntry &e) {
@@ -159,6 +122,14 @@ void IStream::decode_entry(TrainingEntry &e) {
     }
 }
 
+void IStream::reset() {
+    is_.clear();
+    is_.seekg(0, is_.beg);
+    
+    is_.read((char*)buffer_.data(), buffer_.size());
+    reader_.cursor = 0;
+}
+
 Piece IStream::decode_piece() {
     Color c = Color(reader_.read_bit());
     uint8_t code = 0;
@@ -171,8 +142,10 @@ Piece IStream::decode_piece() {
     }
 }
 
-void IStream::fetch_data() {
-    assert(reader_.cursor > N * 8);
+
+void IStream::fetch_data_lazily() {
+    if (reader_.cursor <= N * 8)
+        return;
 
     size_t cur_byte = reader_.cursor / 8;
     size_t bytes_left = 2 * N - cur_byte;
@@ -187,8 +160,4 @@ void IStream::fetch_data() {
         memset(&buffer_[bytes_left + n], 0, 2 * N - bytes_left - n);
 }
 
-void IStream::handle_eof() {
-    batch_nb_ = 0;
-    eof_ = true;
-}
 

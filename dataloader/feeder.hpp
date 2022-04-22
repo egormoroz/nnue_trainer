@@ -27,15 +27,7 @@ struct BinWriter {
 
     std::ofstream fout;
     OStream os;
-};
-
-struct BinReader {
-    BinReader(const char *file);
-
-    std::ifstream fin;
-    IStream is;
-
-    SparseBatch batch;
+    uint64_t hash = 0;
 };
 
 struct Features {
@@ -46,8 +38,12 @@ struct Features {
 };
 
 extern "C" EXPORT BinWriter* binwriter_new(const char* file);
+
 extern "C" EXPORT int write_entry(BinWriter *writer,
     const char *fen, int score, int result);
+
+extern "C" EXPORT uint64_t binwriter_get_hash(BinWriter *writer);
+
 extern "C" EXPORT void delete_binwriter(BinWriter*);
 
 
@@ -62,5 +58,8 @@ extern "C" EXPORT void destroy_batch(SparseBatch *batch);
 
 extern "C" EXPORT Features* get_features(const char *fen);
 extern "C" EXPORT void destroy_features(Features *fts);
+
+
+extern "C" EXPORT uint64_t bin_comp_hash(const char *file);
 
 #endif

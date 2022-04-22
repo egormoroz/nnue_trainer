@@ -1,15 +1,12 @@
 #include "feeder.hpp"
 #include "fen.hpp"
 #include <algorithm>
+#include "myhash.hpp"
+#include <fstream>
 
 BinWriter::BinWriter(const char *file)
     : fout(file, std::ios::binary), os(fout)
 {}
-
-BinReader::BinReader(const char *file)
-    : fin(file, std::ios::binary), is(fin)
-{}
-
 
 BinWriter* binwriter_new(const char* file) {
     return new BinWriter(file);
@@ -17,6 +14,10 @@ BinWriter* binwriter_new(const char* file) {
 
 BatchStream* batchstream_new(const char* file) {
     return new BatchStream(file);
+}
+
+uint64_t binwriter_get_hash(BinWriter *writer) {
+    return writer->hash;
 }
 
 void delete_binwriter(BinWriter* w) {
@@ -35,8 +36,11 @@ int write_entry(BinWriter *writer, const char *fen,
     if (!parse_fen(fen, b))
         return 0;
 
-    writer->os.write_entry(static_cast<int16_t>(score),
-        b.stm, b.mask, b.pieces, b.n_pieces, GameResult(result));
+    GameResult outcome = GameResult(result);
+    int16_t score16 = static_cast<int16_t>(score);
+
+    writer->os.write_entry(score16, b, outcome);
+    writer->hash ^= comp_hash(b, outcome, score16);
 
     return 1;
 }
@@ -97,5 +101,30 @@ Features* get_features(const char *fen) {
 
 void destroy_features(Features *fts) {
     delete fts;
+}
+
+
+uint64_t bin_comp_hash(const char *file) {
+    std::ifstream fin(file, std::ios::binary);
+    if (!fin.is_open())
+        return 0;
+    IStream stream(fin);
+
+    uint64_t hash = 0;
+    TrainingEntry e;
+    int i = 0;
+    while(true) {
+        if (i % SparseBatch::MAX_SIZE == 0)
+            stream.fetch_data_lazily();
+
+        stream.decode_entry(e);
+        if (!e.num_pieces)
+            break;
+
+        hash ^= comp_hash(e);
+        ++i;
+    }
+
+    return hash;
 }
 
