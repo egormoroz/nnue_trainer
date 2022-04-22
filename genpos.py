@@ -8,9 +8,13 @@ import random
 from collections import namedtuple
 from enum import IntEnum
 
+import time
+from datetime import timedelta
+
 from ffi import *
 
-RANDOM_PLIES  = [10, 12, 14, 16]
+
+RANDOM_PLIES  = [8, 10, 12, 14, 16]
 
 MAX_PLIES = 400
 
@@ -37,12 +41,6 @@ class Outcome(IntEnum):
         elif s == '1/2-1/2':
             return Outcome.DRAW
         return None
-
-
-def write_positions(writer: BinWriter, positions: list[Position], 
-        outcome: Outcome) -> None:
-    for pos in positions:
-        writer.write_entry(pos.fen, pos.score, int(outcome))
 
 
 def is_quiet(board: chess.Board, move: chess.Move) -> bool:
@@ -79,7 +77,7 @@ def setup_board() -> chess.Board:
 async def play_game(engine_white: chess.engine.UciProtocol,
         engine_black: chess.engine.UciProtocol,
         limit: chess.engine.Limit,
-        duplicates: set) -> (list[Position], Outcome):
+        duplicates: set) -> (list, Outcome):
 
     positions = []
     board = setup_board()
@@ -93,7 +91,7 @@ async def play_game(engine_white: chess.engine.UciProtocol,
         else:
             result = await engine_black.play(board, limit,
                     info=chess.engine.Info.SCORE)
-        
+
         if 'score' not in result.info or not is_quiet(board, result.move):
             board.push(result.move)
             continue
@@ -106,7 +104,7 @@ async def play_game(engine_white: chess.engine.UciProtocol,
             else:
                 outcome = Outcome.BLACK_WINS
             break
-        
+
         phash = chess.polyglot.zobrist_hash(board)
         if phash in duplicates:
             board.push(result.move)
@@ -147,11 +145,15 @@ class PosCounter:
     def add(self, n: int) -> None:
         self.counter += n
 
+    def remaining(self) -> int:
+        return self.final_value - self.counter
 
-async def run_session(writer: BinWriter, 
+
+async def run_session(writer: BinWriter,
             eng_path: str, counter: PosCounter,
             limit: chess.engine.Limit,
-            duplicates: set) -> None:
+            duplicates: set,
+            start: int) -> None:
 
     _, engine_white = await chess.engine.popen_uci(eng_path)
     _, engine_black = await chess.engine.popen_uci(eng_path)
@@ -160,12 +162,23 @@ async def run_session(writer: BinWriter,
         positions, outcome = await play_game(engine_white,
             engine_black, limit, duplicates)
 
+        if not positions:
+            continue
+
         counter.add(len(positions))
         for pos in positions:
-            print(pos)
+            #print(pos)
             writer.write_entry(pos.fen, pos.score, int(outcome))
 
-        print(f'[{counter.counter} / {counter.final_value}]')
+        elapsed_ns = time.time_ns() - start
+        pos_per_sec = max(1, counter.counter * 1_000_000_000 // elapsed_ns)
+
+        delta = timedelta(seconds=elapsed_ns // 1_000_000_000)
+        remaining = timedelta(seconds=counter.remaining() // pos_per_sec)
+
+        print(f'progress: {counter.counter} / {counter.final_value},',
+              f'pos/s: {pos_per_sec}, elapsed: {str(delta)},',
+              f'remaining: {str(remaining)}')
 
     await engine_white.quit()
     await engine_black.quit()
@@ -173,24 +186,27 @@ async def run_session(writer: BinWriter,
 
 async def main() -> None:
     random.seed(0xdeadbeef)
-    dll = load_dll('./dataloader.dll')
-    writer = BinWriter(dll, 'lul.bin')
-    eng_path = 'saturn.exe'
+    dll = load_dll('./a.out')
+    writer = BinWriter(dll, '40mil.bin')
+    eng_path = '../saturn/build/saturn'
 
-    limit = chess.engine.Limit(time=0.2, depth=16)
+    limit = chess.engine.Limit(time=0.2, depth=12)
     duplicates = set()
-    counter = PosCounter(0, 200)
+    counter = PosCounter(0, 40_000_000)
+
+    start = time.time_ns()
 
     workers = [
-        run_session(writer, eng_path, counter, limit, duplicates)
-        for _ in range(1)
+        run_session(writer, eng_path, counter, limit, duplicates, start)
+        for _ in range(8)
     ]
-    
+
     await asyncio.gather(*workers)
-    print(f'hash: {writer.get_hash():x}')
-    print(len(duplicates))
+    print('hash: ', hex(writer.get_hash()))
+    print('positions: ', len(duplicates))
 
 
 asyncio.set_event_loop_policy(chess.engine.EventLoopPolicy())
 asyncio.run(main())
+
 

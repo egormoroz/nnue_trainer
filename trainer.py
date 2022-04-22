@@ -9,7 +9,7 @@ from ffi import *
 from dataset import *
 from model import *
 
-SCALE = 500.0
+SCALE = 600.0
 NNUE_SCALING = 150
 
 def get_tensors(sb: SparseBatch, device):

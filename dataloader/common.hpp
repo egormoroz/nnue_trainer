@@ -113,14 +113,7 @@ constexpr Piece piece_from_ch(char ch) {
     };
 }
 
-constexpr uint16_t halfkp_idx(int ksq, int psq, int pt, int c) {
-    int p_idx = pt * 2 + c;
-    return static_cast<uint16_t>(
-        psq + (p_idx + ksq * 10) * 64
-    );
-}
-
-constexpr uint16_t halfkp_idx2(int ksq, int psq, Piece p) {
+constexpr uint16_t halfkp_idx(int ksq, int psq, Piece p) {
     return static_cast<uint16_t>(
         (ksq * 64 + psq) * 10 + p
     );
@@ -134,5 +127,7 @@ enum GameResult : uint8_t {
     BLACK_WINS = BLACK,
     DRAW,
 };
+
+constexpr int sq_mirror(int s) { return s ^ 56; }
 
 #endif

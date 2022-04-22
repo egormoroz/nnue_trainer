@@ -56,7 +56,10 @@ void reset_batchstream(BatchStream* stream) {
 SparseBatch* new_batch() { return new SparseBatch; }
 void destroy_batch(SparseBatch *batch) { delete batch; }
 
-static void add_indices(const Board &b, int *indices, 
+namespace {
+
+template<bool mirror>
+void add_indices(const Board &b, int *indices, 
         int &n, int ksq) 
 {
     uint64_t mask = b.mask;
@@ -66,10 +69,14 @@ static void add_indices(const Board &b, int *indices,
 
         if (type_of(p) == KING) continue;
 
-        indices[n++] = halfkp_idx2(ksq, psq, p);
+        if constexpr (mirror)
+            psq = sq_mirror(psq);
+        indices[n++] = halfkp_idx(ksq, psq, p);
     }
 
     std::sort(indices, indices + n);
+}
+
 }
 
 Features* get_features(const char *fen) {
@@ -93,8 +100,10 @@ Features* get_features(const char *fen) {
 
     fts->stm = b.stm == WHITE;
 
-    add_indices(b, fts->wft_indices, fts->n_wfts, ksq[WHITE]);
-    add_indices(b, fts->bft_indices, fts->n_bfts, ksq[BLACK]);
+    add_indices<false>(b, fts->wft_indices, 
+            fts->n_wfts, ksq[WHITE]);
+    add_indices<true>(b, fts->bft_indices, 
+            fts->n_bfts, sq_mirror(ksq[BLACK]));
 
     return fts;
 }

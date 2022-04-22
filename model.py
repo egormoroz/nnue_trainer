@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 
+from psqts import halfka_psqts
+
 NUM_FEATURES = 40960
 
 def crelu(x):
@@ -15,6 +17,8 @@ class NNUE(nn.Module):
         self.l2 = nn.Linear(32, 32)
         self.l3 = nn.Linear(32, 1)
 
+        # self.init_psqt()
+
         self.weight_clipping = [
             # {'params' : [self.ft.weight], 'min_weight' : -127/64, 'max_weight' : 127/64 },
             {'params' : [self.l1.weight], 'min_weight' : -127/64, 'max_weight' : 127/64 },
@@ -22,8 +26,18 @@ class NNUE(nn.Module):
             {'params' : [self.l3.weight], 'min_weight' : -127*127/9600, 'max_weight' : 127*127/9600 },
         ]
 
+    def init_psqt(self):
+        input_weight = self.ft.weight.data
+        input_bias = self.ft.bias.data
+        with torch.no_grad():
+            psqts = halfka_psqts()
+            input_weight[-1, :] = torch.FloatTensor(psqts) / 150.0
+            input_bias[:-1] = 0.0
+        self.ft.weight.data = input_weight
+        self.ft.bias.data = input_bias
+
     def clip_weights(self):
-        self.ft.weight.data[:-1, :].clamp_(-127/64, 127/64)
+        # self.ft.weight.data[:-1, :].clamp_(-127/64, 127/64)
         for group in self.weight_clipping:
             for p in group['params']:
                 p_data_fp32 = p.data
@@ -47,6 +61,6 @@ class NNUE(nn.Module):
         x = crelu(self.l2(x))
         x = self.l3(x)
 
-        return x + (wpsqt - bpsqt) * (stm - 0.5)
+        return x + (wpsqt + bpsqt) * (stm - 0.5)
 
 
