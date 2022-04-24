@@ -127,14 +127,14 @@ def main():
 
     nnue = NNUE().to(device)
     # optimizer = torch.optim.Adam(nnue.parameters(), lr=0.01)
-    optimizer = Ranger21(nnue.parameters(), lr=1e-4, 
+    optimizer = Ranger21(nnue.parameters(), lr=1e-2, 
             num_epochs=num_epochs, num_batches_per_epoch=87)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=0.1, patience=1, verbose=True, min_lr=1e-6)
 
     saved_path = 'halfkav2.pt'
     best_val_loss = 1.0
-    if os.path.isfile(saved_path):
+    if False and os.path.isfile(saved_path):
         try:
             nnue.load_state_dict(torch.load(saved_path))
         except:

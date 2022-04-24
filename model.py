@@ -17,7 +17,7 @@ class NNUE(nn.Module):
         self.l2 = nn.Linear(32, 32)
         self.l3 = nn.Linear(32, 1)
 
-        # self.init_psqt()
+        self.init_psqt()
 
         self.weight_clipping = [
             # {'params' : [self.ft.weight], 'min_weight' : -127/64, 'max_weight' : 127/64 },

@@ -4,13 +4,17 @@ from torch import nn
 
 
 def write_feature_transformer(buf: bytearray, nnue: NNUE):
-    bias = nnue.ft.bias.data
+    bias = nnue.ft.bias.data[:-1]
     bias = bias.mul(127).round().to(torch.int16)
     buf.extend(bias.flatten().numpy().tobytes())
 
-    weight = nnue.ft.weight.data
+    weight = nnue.ft.weight.data[:-1, :]
     weight = weight.mul(127).round().to(torch.int16)
     buf.extend(weight.transpose(0, 1).flatten().numpy().tobytes())
+
+    psqt = nnue.ft.weight.data[-1, :]
+    psqt = psqt.mul(150.0).round().to(torch.int32)
+    buf.extend(psqt.flatten().numpy().tobytes())
 
 
 def write_layer(buf: bytearray, layer: nn.Linear, output = False):

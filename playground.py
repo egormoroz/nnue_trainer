@@ -11,7 +11,7 @@ nnue = NNUE()
 nnue.eval()
 
 def load_params():
-    nnue.load_state_dict(torch.load('halfkav2.pt', map_location=dev))
+    nnue.load_state_dict(torch.load('better.pt', map_location=dev))
 
 def get_tensors(fen):
     fts = dll.get_features(fen.encode('utf-8'))
