@@ -5,7 +5,21 @@
 #include "movgen/generate.hpp"
 #include <vector>
 #include <fstream>
-//#include "bitstream.hpp"
+#include <cstring>
+
+template<typename T>
+void unsigned_to_bytes(T x, uint8_t *bytes) {
+    for (size_t i = 0; i < sizeof(T); ++i)
+        bytes[i] = (x >> (8*i)) & 0xFF;
+}
+
+template<typename T>
+T bytes_to_unsigned(const uint8_t *bytes) {
+    T x{};
+    for (size_t i = 0; i < sizeof(T); ++i)
+        x |= T(bytes[i]) << (8*i);
+    return x;
+}
 
 enum PackedPiece : uint8_t {
     PPW_PAWN, PPB_PAWN,
@@ -129,13 +143,16 @@ uint64_t packed_hash(const PackedBoard &pb) {
     return k;
 }
 
-void unpack_board(const PackedBoard &pb, Board &b) {
+bool unpack_board(const PackedBoard &pb, Board &b) {
     uint64_t hash = 0;
     uint64_t mask = pb.pc_mask;
     CastlingRights cr = NO_CASTLING;
     Color stm = WHITE;
 
     Square ep = SQ_NONE;
+
+    if (popcnt(mask) > 32)
+        return false;
 
     Piece pc_list[32];
     for (int pc_idx = 0; mask; ++pc_idx) {
@@ -182,22 +199,8 @@ void unpack_board(const PackedBoard &pb, Board &b) {
     if (stm == BLACK)
         hash ^= ZOBRIST.side;
 
-    b.setup(pb.pc_mask, pc_list, stm, cr, ep);
-    assert(hash == b.key());
-}
-
-template<typename T>
-void unsigned_to_bytes(T x, uint8_t *bytes) {
-    for (size_t i = 0; i < sizeof(T); ++i)
-        bytes[i] = (x >> (8*i)) & 0xFF;
-}
-
-template<typename T>
-T bytes_to_unsigned(const uint8_t *bytes) {
-    T x{};
-    for (size_t i = 0; i < sizeof(T); ++i)
-        x |= T(bytes[i]) << (8*i);
-    return x;
+    return b.setup(pb.pc_mask, pc_list, stm, cr, ep)
+        && hash == b.key();
 }
 
 void PosSeq::write_to_stream(std::ostream &os) const {
@@ -477,7 +480,8 @@ void PosChain::write_to_stream(std::ostream &os) const {
 
     StateInfo si;
     Board b(&si);
-    unpack_board(start, b);
+    bool _ = unpack_board(start, b);
+    assert(_);
 
     int16_t prev_score = 0;
     for (uint16_t i = 0; i < n_moves; ++i) {
@@ -522,7 +526,8 @@ bool PosChain::load_from_stream(std::istream &is) {
 
     StateInfo si;
     Board b(&si);
-    unpack_board(start, b);
+    if (!unpack_board(start, b))
+        return false;
 
     size_t offset = is.tellg();
     is.read((char*)buf, sizeof(buf));
@@ -580,7 +585,8 @@ void repack_games(const char *fname_in, const char *fname_out) {
         pc.result = ps.result;
         pc.n_moves = ps.n_moves;
 
-        unpack_board(ps.start, b);
+        bool _ = unpack_board(ps.start, b);
+        assert(_);
 
         for (int i = 0; i < ps.n_moves; ++i) {
             generate<LEGAL>(b, moves);
@@ -594,20 +600,87 @@ void repack_games(const char *fname_in, const char *fname_out) {
     }
 }
 
+int recover_pack(const char *fname_in, const char *fname_out, const char *hash_out) {
+    std::ifstream fin(fname_in, std::ios::binary);
+    std::ofstream fout(fname_out, std::ios::binary);
+
+    uint64_t cum_hash = 0;
+    int n_pos = 0;
+
+    ChainReader reader;
+    PackResult pr;
+
+    char buf[PosChain::MAX_PACKED_SIZE];
+
+    while (fin) {
+        size_t start = fin.tellg();
+        pr = reader.start_new_chain(fin);
+        if (pr == PackResult::END_OF_FILE || pr == PackResult::UNEXPECTED_EOF)
+            break;
+
+        if (is_ok(pr)) {
+            uint64_t h = reader.board.key();
+            while (is_ok(pr = reader.next(fin)))
+                h ^= reader.board.key();
+
+            if (pr == PackResult::END_OF_CHAIN)  {
+                size_t n_bytes = size_t(fin.tellg()) - start;
+                fin.clear();
+                fin.seekg(start);
+                fin.read(buf, n_bytes);
+                fout.write(buf, n_bytes);
+                n_pos += reader.n_moves;
+
+                h ^= reader.board.do_move(reader.move, &reader.si).key();
+                cum_hash ^= h;
+                continue;
+            }
+        }
+
+        fin.seekg(start + 1);
+    }
+
+    fout.close();
+    fout.open(hash_out);
+    fout << cum_hash;
+
+    return n_pos;
+}
+
+bool validate_packed_games(const char *fname) {
+    std::ifstream fin(fname, std::ios::binary);
+
+    ChainReader reader;
+    PackResult pr;
+
+    while (is_ok(pr = reader.start_new_chain(fin))) {
+        while (is_ok(pr = reader.next(fin)));
+
+        if (pr != PackResult::END_OF_CHAIN)
+            return false;
+    }
+
+    return pr == PackResult::END_OF_FILE;
+}
+
 
 bool validate_packed_games(const char *fname, uint64_t expected_cum_hash) {
     std::ifstream fin(fname, std::ios::binary);
 
     uint64_t cum_hash = 0;
     ChainReader reader;
+    PackResult pr;
 
-    while (reader.start_new_chain(fin)) {
+    while (is_ok(pr = reader.start_new_chain(fin))) {
         cum_hash ^= reader.board.key();
-        while (reader.next(fin))
+
+        while (is_ok(pr = reader.next(fin)))
             cum_hash ^= reader.board.key();
 
-        if (reader.board.is_valid_move(reader.move))
-            cum_hash ^= reader.board.do_move(reader.move, &reader.si).key();
+        if (pr != PackResult::END_OF_CHAIN)
+            return false;
+
+        cum_hash ^= reader.board.do_move(reader.move, &reader.si).key();
     }
 
     return expected_cum_hash == cum_hash;
@@ -630,21 +703,21 @@ bool validate_packed_games(const char *fname, const char *hashes_fname) {
 
 
 ChainReader::ChainReader()
-    : board(&si), n_moves(0)
+    : board(&si)
 {}
 
-bool ChainReader::start_new_chain(std::istream &is) {
+PackResult ChainReader::start_new_chain(std::istream &is) {
     PackedBoard start;
 
     if (!is.read((char*)buf, sizeof(start.pc_mask)))
-        return false;
+        return PackResult::END_OF_FILE;
     start.pc_mask = bytes_to_unsigned<uint64_t>(buf);
 
     if (!is.read((char*)start.pc_list, sizeof(start.pc_list)))
-        return false;
+        return PackResult::UNEXPECTED_EOF;
 
     if (!is.read((char*)buf, 2))
-        return false;
+        return PackResult::UNEXPECTED_EOF;
     uint16_t len_and_result = bytes_to_unsigned<uint16_t>(buf);
 
     result = len_and_result & 3;
@@ -652,9 +725,14 @@ bool ChainReader::start_new_chain(std::istream &is) {
     move_idx = 0;
     move = MOVE_NONE;
     score = 0;
-    assert(n_moves <= sizeof(buf) / 2);
 
-    unpack_board(start, board);
+    if (n_moves > PosChain::MAX_SEQ_LEN)
+        return PackResult::INVALID_HEADER;
+    if (result > 2)
+        return PackResult::INVALID_HEADER;
+
+    if (!unpack_board(start, board))
+        return PackResult::INVALID_BOARD;
 
     memset(buf, 0, sizeof(buf));
     br.data = buf;
@@ -667,28 +745,56 @@ bool ChainReader::start_new_chain(std::istream &is) {
     // read the first entry
     read_movescore();
     if (!board.is_valid_move(move))
-        return false;
+        return PackResult::INVALID_MOVE;
 
-    return 8 * is_bytes_read >= br.cursor;
+    return 8 * is_bytes_read >= br.cursor 
+        ? PackResult::OK 
+        : PackResult::UNEXPECTED_EOF;
 }
 
-bool ChainReader::next(std::istream &is) {
+PackResult ChainReader::next(std::istream &is) {
     // don't forget to fix the stream position
     if (move_idx == n_moves)
         adjust_istream_pos(is);
     if (move_idx >= n_moves)
-        return false;
+        return PackResult::END_OF_CHAIN;
 
-    assert(board.is_valid_move(move));
+    assert(board.is_valid_move(move)); // we already checked so it's an assert
     board = board.do_move(move, &si);
     read_movescore();
 
     if (!board.is_valid_move(move))
-        return false;
+        return PackResult::INVALID_MOVE;
 
     // This entry isn't valid if we couldn't read enough bytes
-    return 8 * is_bytes_read >= br.cursor;
+    return 8 * is_bytes_read >= br.cursor 
+        ? PackResult::OK 
+        : PackResult::UNEXPECTED_EOF;
 }
+
+bool ChainReader::skip_invalid_data(std::istream &is) {
+    size_t off = is.tellg();
+
+    while (is) {
+        PackResult pr = start_new_chain(is);
+        if (pr == PackResult::UNEXPECTED_EOF) 
+            return false;
+
+        if (is_ok(pr)) {
+            while (is_ok(pr = next(is)));
+            if (pr == PackResult::END_OF_CHAIN) {
+                is.clear();
+                is.seekg(off);
+                return true;
+            }
+        }
+
+        is.seekg(++off);
+    }
+
+    return false;
+}
+
 
 void ChainReader::adjust_istream_pos(std::istream &is) const {
     // In start_new_chain we read a bug chunk of bytes: most likely more than we need, so
@@ -712,5 +818,99 @@ void ChainReader::read_movescore() {
     score = -score - diff;
 
     ++move_idx;
+}
+
+
+void PackIndex::write_to_stream(std::ostream &os) const {
+    constexpr size_t n = sizeof(size_t);
+
+    uint8_t buf[sizeof(Block)];
+    unsigned_to_bytes(n_blocks, buf);
+    os.write((const char*)buf, sizeof(n_blocks));
+
+    for (size_t i = 0; i < n_blocks; ++i) {
+        unsigned_to_bytes(blocks[i].off_begin, buf + n * 0);
+        unsigned_to_bytes(blocks[i].off_end, buf + n * 1);
+        unsigned_to_bytes(blocks[i].n_pos, buf + n * 2);
+        os.write((const char*)buf, sizeof(Block));
+    }
+}
+
+bool PackIndex::load_from_stream(std::istream &is) {
+    constexpr size_t n = sizeof(size_t);
+    uint8_t buf[sizeof(Block)];
+
+    if (!is.read((char*)buf, n))
+        return false;
+
+    n_blocks = bytes_to_unsigned<size_t>(buf);
+    if (n_blocks > MAX_BLOCKS)
+        return false;
+
+    for (size_t i = 0; i < n_blocks; ++i) {
+        if (!is.read((char*)buf, sizeof(Block)))
+            return false;
+        blocks[i].off_begin = bytes_to_unsigned<size_t>(buf + n * 0);
+        blocks[i].off_end = bytes_to_unsigned<size_t>(buf + n * 1);
+        blocks[i].n_pos = bytes_to_unsigned<size_t>(buf + n * 2);
+
+        if (blocks[i].off_begin > blocks[i].off_end)
+            return false;
+    }
+
+    return true;
+}
+
+bool create_index(const char *fname_pack, const char *fname_index) {
+    constexpr size_t min_block_size = 1024 * 1024; // 1MB
+
+    std::ifstream fin(fname_pack, std::ios::binary);
+    fin.seekg(0, std::ios::end);
+    size_t n_file_size = fin.tellg();
+    fin.clear();
+    fin.seekg(0);
+
+    size_t n_block_size = std::max(min_block_size, n_file_size / PackIndex::MAX_BLOCKS);
+
+    ChainReader cr;
+    PackResult pr;
+    PackIndex pi;
+
+    size_t off_begin = 0, n_pos = 0;
+
+    while (is_ok(pr = cr.start_new_chain(fin))) {
+        while (is_ok(pr = cr.next(fin)));
+
+        if (pr != PackResult::END_OF_CHAIN)
+            return false;
+
+        n_pos += cr.n_moves;
+        size_t off_end = fin.tellg();
+
+        if (off_end - off_begin >= n_block_size) {
+            PackIndex::Block &blk = pi.blocks[pi.n_blocks++];
+            blk.off_begin = off_begin;
+            blk.off_end = off_end;
+            blk.n_pos = n_pos;
+
+            n_pos = 0;
+            off_begin = off_end;
+        }
+    }
+
+    if (pr != PackResult::END_OF_FILE)
+        return false;
+
+    if (n_pos) {
+        PackIndex::Block &blk = pi.blocks[pi.n_blocks++];
+        blk.off_begin = off_begin;
+        blk.off_end = fin.tellg();
+        blk.n_pos = n_pos;
+    }
+
+    std::ofstream fout(fname_index, std::ios::binary);
+    pi.write_to_stream(fout);
+
+    return bool(fout);
 }
 

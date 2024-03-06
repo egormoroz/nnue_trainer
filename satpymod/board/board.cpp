@@ -5,6 +5,7 @@
 #include "../primitives/utility.hpp"
 #include "../core/eval.hpp"
 #include "../nnue/evaluate.hpp"
+#include <cstring>
 
 /*
  * FILE: board.cpp
@@ -32,12 +33,12 @@ Board Board::start_pos(StateInfo *si) {
     bool b = board.load_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
     assert(b);
-    board.validate();
+    assert(board.is_valid());
 
     return board;
 }
 
-void Board::setup(Bitboard mask, const Piece *pc_list, Color stm,
+bool Board::setup(Bitboard mask, const Piece *pc_list, Color stm,
         CastlingRights cr, Square en_passant)
 {
     StateInfo *si = si_;
@@ -61,8 +62,12 @@ void Board::setup(Bitboard mask, const Piece *pc_list, Color stm,
     if (is_ok(en_passant_))
         key_ ^= ZOBRIST.enpassant[file_of(en_passant_)];
 
+    // just gotta make sure real quick we don't crash in update_pin_info
+    if (popcnt(pieces(WHITE, KING)) != 1 || popcnt(pieces(BLACK, KING)) != 1)
+        return false;
     update_pin_info();
-    validate();
+
+    return is_valid();
 }
 
 

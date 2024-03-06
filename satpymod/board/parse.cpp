@@ -76,7 +76,7 @@ bool Board::load_fen(std::string_view fen) {
     }
 
     update_pin_info();
-    validate();
+    assert(is_valid());
 
     return true;
 }

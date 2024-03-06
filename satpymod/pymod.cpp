@@ -34,7 +34,7 @@ PackReader* pr_create(const char *file_path) {
 
     PackReader *pr = new PackReader;
     pr->fin = std::move(fin);
-    pr->is_ok = pr->reader.start_new_chain(pr->fin);
+    pr->is_ok = is_ok(pr->reader.start_new_chain(pr->fin));
     return pr;
 }
 
@@ -44,7 +44,7 @@ void pr_reset(PackReader *pr) {
 
     pr->fin.seekg(0);
     pr->fin.clear();
-    pr->is_ok = pr->reader.start_new_chain(pr->fin);
+    pr->is_ok = is_ok(pr->reader.start_new_chain(pr->fin));
 }
 
 void pr_destroy(PackReader *pr) {
@@ -55,10 +55,11 @@ int pr_next(PackReader *pr) {
     if (!pr)
         return RET_INVALID;
 
-    if (pr->reader.next(pr->fin))
-        pr->is_ok = true;
-    else
-        pr->is_ok = pr->reader.start_new_chain(pr->fin);
+    PackResult res = pr->reader.next(pr->fin);
+    if (is_ok(res))
+        pr->is_ok = is_ok(res);
+    else if (res == PackResult::END_OF_CHAIN)
+        pr->is_ok = is_ok(pr->reader.start_new_chain(pr->fin));
     return pr->is_ok ? 0 : 1;
 }
 

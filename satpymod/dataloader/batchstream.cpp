@@ -44,8 +44,7 @@ void BatchStream::worker_routine(const char *fpath,
         // fetch next batch...
         bool eof = false;
         while ((int)buffer.size() < batch_size) {
-            bool ok = r.start_new_chain(fin);
-            if (!ok) {
+            if (!is_ok(r.start_new_chain(fin))) {
                 fin.clear();
                 fin.seekg(0);
                 eof = true;
@@ -73,7 +72,7 @@ void BatchStream::worker_routine(const char *fpath,
                 }
 
                 buffer.push_back(te);
-            } while (r.next(fin));
+            } while (is_ok(r.next(fin)));
         }
 
         int n = std::min((int)buffer.size(), batch_size);

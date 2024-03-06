@@ -33,7 +33,7 @@ int main() {
 #endif
 
     /* repack_games("2games.bin", "2games_repack.bin"); */
-    bool result = validate_packed_games("d7_repack.bin", "d7.hash");
+    bool result = validate_packed_games("d6nnv2.bin", "d6nnv2.hash");
     if (result) {
         printf("valid!!\n");
     } else {
