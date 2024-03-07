@@ -3,24 +3,10 @@
 #include "pymod.hpp"
 #include "dataloader/batchstream.hpp"
 
-#include <fstream>
+#include <chrono>
 
-using namespace std;
-
-bool compare_seqs(const PosSeq &a, const PosSeq &b) {
-    if (a.n_moves != b.n_moves)
-        return false;
-
-    for (int i = 0; i < a.n_moves; ++i)
-        if (a.seq[i].move_idx != b.seq[i].move_idx || a.seq[i].score != b.seq[i].score)
-            return false;
-    return true;
-}
 
 int main() {
-    /* init_zobrist(); */
-    /* init_attack_tables(); */
-    /* init_ps_tables(); */
 
 #ifdef NONNUE
     printf("NNUE is disabled, using regular eval\n");
@@ -32,13 +18,25 @@ int main() {
     }
 #endif
 
-    /* repack_games("2games.bin", "2games_repack.bin"); */
-    bool result = validate_packed_games("d6nnv2.bin", "d6nnv2.hash");
-    if (result) {
-        printf("valid!!\n");
-    } else {
-        printf("invalid...\n");
+    using clk_t = std::chrono::steady_clock;
+
+    const char *bin_fpath = "d6NN_50mil.bin";
+    const char *index_fpath = "d6NN_50mil.index";
+
+    BatchStream stream(bin_fpath, index_fpath, 1, 4, 16384, false);
+    auto start = clk_t::now();
+    int batch_per_sec = 0;
+    for (int i = 0;; ++i) {
+        SparseBatch *sb = stream.next_batch();
+
+        if (i % 100 == 0) {
+            printf("[%d] %d batch/s %d \n", i, batch_per_sec, sb->size);
+            int delta = std::chrono::duration_cast<std::chrono::seconds>(
+                    clk_t::now() - start).count();
+            batch_per_sec = (i + 1) / std::max(1, delta);
+        }
     }
+
 
     return 0;
 }

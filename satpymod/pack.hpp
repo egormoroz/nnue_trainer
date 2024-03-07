@@ -133,6 +133,7 @@ bool validate_packed_games(const char *fname, uint64_t hash);
 bool validate_packed_games(const char *fname, const char *hashes_fname);
 
 // assumes the pack is valid
+bool create_index(const char *fname_pack, PackIndex &pi);
 bool create_index(const char *fname_pack, const char *fname_index);
 
 #endif

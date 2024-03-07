@@ -1,23 +1,21 @@
 #include "batch.hpp"
-#include <cstring>
 
 
-SparseBatch::SparseBatch(const TrainingEntry *entries, 
-        int n_entries, bool with_virtual) 
+SparseBatch::SparseBatch(int batch_size, int max_fts) 
+    : size(batch_size), max_active_fts(max_fts)
 {
-    size = n_entries;
-
     if (!size)
         return;
 
     stm = new float[size];
     score = new float[size];
     result = new float[size];
-
-    max_active_fts = with_virtual ? halfkp::MAX_TOTAL_FTS : halfkp::MAX_REAL_FTS;
-
     wfts = new int[size * max_active_fts];
     bfts = new int[size * max_active_fts];
+}
+
+void SparseBatch::fill(const TrainingEntry *entries, int n_entries) {
+    size = n_entries;
 
     /* constexpr float res_to_val[3] = { 0.f, 1.f, 0.5f, }; */
     constexpr float res_to_val[2][3] = { 
@@ -47,33 +45,12 @@ SparseBatch::SparseBatch(const TrainingEntry *entries,
     }
 }
 
-SparseBatch::SparseBatch(SparseBatch &&other) {
-    memcpy(this, &other, sizeof(SparseBatch));
-    other.size = 0;
-}
-
-SparseBatch& SparseBatch::operator=(SparseBatch &&other) {
-    if (this->size) {
-        delete[] stm;
-        delete[] score;
-        delete[] result;
-        delete[] wfts;
-        delete[] bfts;
-    }
-
-    memcpy(this, &other, sizeof(SparseBatch));
-    other.size = 0;
-    return *this;
-}
-
-
-SparseBatch::~SparseBatch() {
-    if (size) {
-        delete[] stm;
-        delete[] score;
-        delete[] result;
-        delete[] wfts;
-        delete[] bfts;
-    }
+void SparseBatch::free() {
+    delete[] stm;
+    delete[] score;
+    delete[] result;
+    delete[] wfts;
+    delete[] bfts;
+    size = 0;
 }
 

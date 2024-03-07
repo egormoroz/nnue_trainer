@@ -861,7 +861,7 @@ bool PackIndex::load_from_stream(std::istream &is) {
     return true;
 }
 
-bool create_index(const char *fname_pack, const char *fname_index) {
+bool create_index(const char *fname_pack, PackIndex &pi) {
     constexpr size_t min_block_size = 1024 * 1024; // 1MB
 
     std::ifstream fin(fname_pack, std::ios::binary);
@@ -874,8 +874,7 @@ bool create_index(const char *fname_pack, const char *fname_index) {
 
     ChainReader cr;
     PackResult pr;
-    PackIndex pi;
-
+    pi.n_blocks = 0;
     size_t off_begin = 0, n_pos = 0;
 
     while (is_ok(pr = cr.start_new_chain(fin))) {
@@ -885,7 +884,7 @@ bool create_index(const char *fname_pack, const char *fname_index) {
             return false;
 
         n_pos += cr.n_moves;
-        size_t off_end = fin.tellg();
+        size_t off_end = std::min(size_t(fin.tellg()), n_file_size);
 
         if (off_end - off_begin >= n_block_size) {
             PackIndex::Block &blk = pi.blocks[pi.n_blocks++];
@@ -904,13 +903,20 @@ bool create_index(const char *fname_pack, const char *fname_index) {
     if (n_pos) {
         PackIndex::Block &blk = pi.blocks[pi.n_blocks++];
         blk.off_begin = off_begin;
-        blk.off_end = fin.tellg();
+        blk.off_end = n_file_size;
         blk.n_pos = n_pos;
     }
 
+    return true;
+}
+
+bool create_index(const char *fname_pack, const char *fname_index) {
+    PackIndex pi;
+    if (!create_index(fname_pack, pi))
+        return false;
+
     std::ofstream fout(fname_index, std::ios::binary);
     pi.write_to_stream(fout);
-
     return bool(fout);
 }
 

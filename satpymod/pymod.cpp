@@ -112,12 +112,13 @@ int validate_pack(const char *fname, uint64_t hash) {
     return 1 - validate_packed_games(fname, hash);
 }
 
-
-BatchStream* create_batch_stream(const char *fpath, 
-        int n_prefetch, int batch_size, int add_virtual)
+BatchStream* create_batch_stream(
+        const char *bin_fpath, const char *index_fpath,
+        int n_prefetch, int n_workers, int batch_size, int add_virtual)
 {
-    assert(n_prefetch > 0 && batch_size > 0 && fpath);
-    return new BatchStream(fpath, n_prefetch, batch_size, add_virtual);
+    assert(n_prefetch > 0 && batch_size > 0 && bin_fpath && index_fpath && n_workers > 0);
+    return new BatchStream(bin_fpath, index_fpath, 
+            n_prefetch, n_workers, batch_size, add_virtual);
 }
                                                      
 void destroy_batch_stream(BatchStream *bs) {

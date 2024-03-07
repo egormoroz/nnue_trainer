@@ -50,8 +50,9 @@ EXPORT int validate_pack(const char *fname, uint64_t hash);
 class BatchStream;
 struct SparseBatch;
 
-EXPORT BatchStream* create_batch_stream(const char *fpath, 
-        int n_prefetch, int batch_size, int add_virtual);
+EXPORT BatchStream* create_batch_stream(
+        const char *bin_fpath, const char *index_fpath,
+        int n_prefetch, int n_workers, int batch_size, int add_virtual);
 
 EXPORT void destroy_batch_stream(BatchStream *bs);
 

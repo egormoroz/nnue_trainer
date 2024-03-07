@@ -17,29 +17,23 @@ struct TrainingEntry {
     uint8_t result;
 };
 
+// Always has the capacity of batch_size bytes
 struct SparseBatch {
-    // TODO: check perfomance and consider arena allocator
-    // SF doesn't do this btw
-    SparseBatch(const TrainingEntry *entries, int n_entries, bool with_virtual);
-
     SparseBatch() = default;
-    SparseBatch(SparseBatch &&other);
-    SparseBatch(const SparseBatch&) = delete;
+    SparseBatch(int batch_size, int max_active_fts);
+
+    void fill(const TrainingEntry *entries, int n_entries);
+    void free();
 
     int size = 0;
-    int max_active_fts;
+    int max_active_fts = 0;
 
-    float *stm;
-    float *score;
-    float *result;
+    float *stm = nullptr;
+    float *score = nullptr;
+    float *result = nullptr;
 
-    int *wfts;
-    int *bfts;
-
-    SparseBatch& operator=(SparseBatch &&other);
-    SparseBatch& operator=(const SparseBatch&) = delete;
-
-    ~SparseBatch();
+    int *wfts = nullptr;
+    int *bfts = nullptr;
 };
 
 #endif
