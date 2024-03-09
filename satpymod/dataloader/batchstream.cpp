@@ -100,6 +100,10 @@ void BatchStream::file_reader_routine() {
                     chunk_done_.wait(lck);
             }
             n_chunks_processed_ = 0;
+
+            SparseBatch dummy = allocate_batch(); 
+            dummy.size = 0;
+            batch_queue_.push(dummy);
         }
     }
 }
@@ -107,7 +111,7 @@ void BatchStream::file_reader_routine() {
 void BatchStream::worker_routine() {
     ChainReader r;
     std::vector<TrainingEntry> thread_te_buf;
-    thread_te_buf.reserve(batch_size_);
+    thread_te_buf.reserve(std::max(index_.blocks[0].n_pos, (size_t)batch_size_));
 
     while (!exit_) {
         Chunk ch;
@@ -149,9 +153,11 @@ void BatchStream::worker_routine() {
                 return;
             }
 
-            if ((int)thread_te_buf.size() >= batch_size_) {
-                on_new_entries(thread_te_buf.data(), thread_te_buf.size());
-                thread_te_buf.clear();
+            while (thread_te_buf.size() >= (size_t)batch_size_) {
+                SparseBatch sb = allocate_batch();
+                sb.fill(thread_te_buf.data() + thread_te_buf.size() - batch_size_, batch_size_);
+                batch_queue_.push(sb);
+                thread_te_buf.resize(thread_te_buf.size() - batch_size_);
             }
         }
         free_chunk(ch);
@@ -161,7 +167,7 @@ void BatchStream::worker_routine() {
             fprintf(stderr, "[WARNING] BatchStream::worker_routine: "
                     "final chain was incorrect...\n");
         } else if (!thread_te_buf.empty()) {
-            on_new_entries(thread_te_buf.data(), thread_te_buf.size());
+            collect_leftovers(thread_te_buf.data(), thread_te_buf.size());
             thread_te_buf.clear();
         }
 
@@ -170,7 +176,7 @@ void BatchStream::worker_routine() {
     }
 }
 
-void BatchStream::on_new_entries(const TrainingEntry *entries, int n_entries) {
+void BatchStream::collect_leftovers(const TrainingEntry *entries, int n_entries) {
     std::lock_guard<std::mutex> lck(te_buffer_mtx_);
     while (n_entries > 0) {
         int n = batch_size_ - int(te_buffer_.size());
@@ -181,9 +187,11 @@ void BatchStream::on_new_entries(const TrainingEntry *entries, int n_entries) {
         entries += n;
         n_entries -= n;
 
-        if (int(te_buffer_.size()) == batch_size_) {
+        if (int(te_buffer_.size()) == batch_size_ 
+                || (n_chunks_processed_ + 1 == index_.n_blocks && !te_buffer_.empty())) 
+        {
             SparseBatch sb = allocate_batch();
-            sb.fill(te_buffer_.data(), batch_size_);
+            sb.fill(te_buffer_.data(), te_buffer_.size());
             te_buffer_.clear();
             batch_queue_.push(sb);
         }

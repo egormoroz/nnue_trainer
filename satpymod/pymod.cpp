@@ -42,8 +42,8 @@ void pr_reset(PackReader *pr) {
     if (!pr)
         return;
 
-    pr->fin.seekg(0);
     pr->fin.clear();
+    pr->fin.seekg(0);
     pr->is_ok = is_ok(pr->reader.start_new_chain(pr->fin));
 }
 

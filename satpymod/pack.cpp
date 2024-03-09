@@ -236,7 +236,7 @@ bool PosSeq::load_from_stream(std::istream &is) {
 
     result = len_and_result & 3;
     n_moves = len_and_result >> 2;
-    assert(n_moves <= MAX_SEQ_LEN);
+    assert(n_moves <= MAX_PLIES);
 
     for (int i = 0; i < (int)n_moves; ++i) {
         if (!is.read((char*)buf, 3))
@@ -463,7 +463,7 @@ static int16_t read_int(BitReader &br) {
 }
 
 void PosChain::write_to_stream(std::ostream &os) const {
-    uint8_t buf[MAX_SEQ_LEN * 2];
+    uint8_t buf[MAX_PLIES * 2];
 
     unsigned_to_bytes(start.pc_mask, buf);
     os.write((const char*)buf, sizeof(start.pc_mask));
@@ -508,7 +508,7 @@ void PosChain::write_to_stream(std::ostream &os) const {
 }
 
 bool PosChain::load_from_stream(std::istream &is) {
-    uint8_t buf[MAX_SEQ_LEN * 2];
+    uint8_t buf[MAX_PLIES * 2];
     if (!is.read((char*)buf, sizeof(start.pc_mask)))
         return false;
     start.pc_mask = bytes_to_unsigned<uint64_t>(buf);
@@ -522,7 +522,7 @@ bool PosChain::load_from_stream(std::istream &is) {
 
     result = len_and_result & 3;
     n_moves = len_and_result >> 2;
-    assert(n_moves <= MAX_SEQ_LEN);
+    assert(n_moves <= MAX_PLIES);
 
     StateInfo si;
     Board b(&si);
@@ -726,7 +726,7 @@ PackResult ChainReader::start_new_chain(std::istream &is) {
     move = MOVE_NONE;
     score = 0;
 
-    if (n_moves > PosChain::MAX_SEQ_LEN)
+    if (n_moves > MAX_PLIES)
         return PackResult::INVALID_HEADER;
     if (result > 2)
         return PackResult::INVALID_HEADER;

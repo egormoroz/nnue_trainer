@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 project(satpymod)
 
-add_executable(satpymod
+add_library(satpymod SHARED
     main.cpp zobrist.cpp pack.cpp pymod.cpp
     dataloader/batch.cpp dataloader/halfkp.cpp dataloader/batchstream.cpp
     board/board.cpp board/board_moves.cpp board/parse.cpp 

@@ -70,6 +70,9 @@ class Model(nn.Module):
         pred = self.forward(wft_ics, wft_vals, bft_ics, bft_vals, stm)
         return pred * S_O
 
+    def configure_optimizers(self):
+        opt = torch.optim.AdamW(self.parameters())
+        return opt
 
 
 

@@ -1,4 +1,5 @@
 #include "batch.hpp"
+#include <algorithm>
 
 
 SparseBatch::SparseBatch(int batch_size, int max_fts) 
@@ -31,17 +32,12 @@ void SparseBatch::fill(const TrainingEntry *entries, int n_entries) {
 
         int* wft_slice = wfts + i * max_active_fts;
         int* bft_slice = bfts + i * max_active_fts;
-        int s;
 
-        for (s = 0; s < (int)e.n_wfts; ++s)
-            wft_slice[s] = e.wfts[s];
-        for (; s < max_active_fts; ++s)
-            wft_slice[s] = -1;
-
-        for (s = 0; s < (int)e.n_bfts; ++s)
-            bft_slice[s] = e.bfts[s];
-        for (; s < max_active_fts; ++s)
-            bft_slice[s] = -1;
+        // Bottlenecked by this thingy (i.e. RAM throughput)
+        std::copy(e.wfts, e.wfts + e.n_wfts, wft_slice);
+        std::fill(wft_slice + e.n_wfts, wft_slice + max_active_fts, -1);
+        std::copy(e.bfts, e.bfts + e.n_bfts, bft_slice);
+        std::fill(bft_slice + e.n_bfts, bft_slice + max_active_fts, -1);
     }
 }
 

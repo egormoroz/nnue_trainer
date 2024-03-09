@@ -20,13 +20,13 @@ int main() {
 
     using clk_t = std::chrono::steady_clock;
 
-    const char *bin_fpath = "d6NN_50mil.bin";
-    const char *index_fpath = "d6NN_50mil.index";
+    const char *bin_fpath = "d6nnv4.bin";
+    const char *index_fpath = "d6nnv4.index";
 
     BatchStream stream(bin_fpath, index_fpath, 1, 4, 16384, false);
     auto start = clk_t::now();
     int batch_per_sec = 0;
-    for (int i = 0;; ++i) {
+    for (int i = 0; ; ++i) {
         SparseBatch *sb = stream.next_batch();
 
         if (i % 100 == 0) {

@@ -94,7 +94,7 @@ private:
 
     // Group into batches and push them to batch queue.
     // This gets called by worker threads and potentially blocks on batch_queue_ mutex
-    void on_new_entries(const TrainingEntry *entries, int n_entries);
+    void collect_leftovers(const TrainingEntry *entries, int n_entries);
 
     SparseBatch allocate_batch();
     void free_batch(SparseBatch b);

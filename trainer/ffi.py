@@ -51,7 +51,8 @@ def setup_prototypes(dll):
 
     dll.create_batch_stream.restype = ctypes.c_void_p
     dll.create_batch_stream.argtypes = [
-            ctypes.c_char_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+            ctypes.c_char_p, ctypes.c_char_p, 
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int]
 
     dll.destroy_batch_stream.restype = None
     dll.destroy_batch_stream.argtypes = [ctypes.c_void_p]
@@ -126,18 +127,23 @@ class SparseBatch(ctypes.Structure):
         ('bfts', ctypes.POINTER(ctypes.c_int)),
     ]
 
-    def to_torch(self, device='cpu'):
+    def to_numpy(self):
         wft_ics = np.ctypeslib.as_array(self.wfts, shape=(self.size, self.max_active_fts))
         bft_ics = np.ctypeslib.as_array(self.bfts, shape=(self.size, self.max_active_fts))
-
-        wft_ics = torch.from_numpy(wft_ics).to(device)
-        bft_ics = torch.from_numpy(bft_ics).to(device)
-        wft_vals = torch.ones_like(wft_ics, dtype=torch.float32)
-        bft_vals = torch.ones_like(bft_ics, dtype=torch.float32)
-
         stm = np.ctypeslib.as_array(self.stm, shape=(self.size, 1))
         score = np.ctypeslib.as_array(self.score, shape=(self.size, 1))
         result = np.ctypeslib.as_array(self.result, shape=(self.size, 1))
+        return wft_ics, bft_ics, stm, score, result
+
+
+    def to_torch(self, device='cpu'):
+        wft_ics, bft_ics, stm, score, result = self.to_numpy()
+
+        wft_ics = torch.from_numpy(wft_ics).to(device)
+        bft_ics = torch.from_numpy(bft_ics).to(device)
+
+        wft_vals = torch.ones_like(wft_ics, dtype=torch.float32)
+        bft_vals = torch.ones_like(bft_ics, dtype=torch.float32)
 
         stm = torch.from_numpy(stm).to(device)
         score = torch.from_numpy(score).to(device)
@@ -153,11 +159,13 @@ SparseBatchPtr = ctypes.POINTER(SparseBatch)
 
 
 class BatchStream:
-    def __init__(self, fpath: str, n_prefetch: int,
+    def __init__(self, bin_fpath: str, index_fpath: str,
+                 n_prefetch: int, n_workers: int,
                  batch_size: int, add_virtual: int):
         assert dllmod
         self.stream = dllmod.create_batch_stream(
-                fpath.encode('utf-8'), n_prefetch, batch_size, add_virtual)
+                bin_fpath.encode('utf-8'), index_fpath.encode('utf-8'), 
+                n_prefetch, n_workers, batch_size, add_virtual)
 
     def next_batch(self):
         assert dllmod

@@ -7,6 +7,8 @@
 #include "bitrw.hpp"
 #include "board/board.hpp"
 
+constexpr int MAX_PLIES = 1024;
+
 struct PackedBoard {
     uint64_t pc_mask;
     uint8_t pc_list[16];
@@ -19,13 +21,13 @@ enum GameOutcome : uint8_t {
 };
 
 struct PosSeq {
-    static constexpr int MAX_SEQ_LEN = 512;
+    //static constexpr int MAX_SEQ_LEN = 512;
 
     PackedBoard start;
     struct MoveScore {
         uint16_t move_idx;
         int16_t score;
-    } seq[MAX_SEQ_LEN];
+    } seq[MAX_PLIES];
 
     uint16_t n_moves = 0;
     uint8_t result;
@@ -79,7 +81,7 @@ struct ChainReader {
 
 private:
     uint16_t move_idx = 0;
-    uint8_t buf[512 * 2];
+    uint8_t buf[MAX_PLIES * 2];
     BitReader br;
     size_t is_off_start = 0, is_bytes_read = 0;
 
@@ -88,9 +90,8 @@ private:
 };
 
 struct PosChain {
-    static constexpr int MAX_SEQ_LEN = 512;
     // a very generous upper bound
-    static constexpr int MAX_PACKED_SIZE = sizeof(PackedBoard) + 2 + 4 * MAX_SEQ_LEN;
+    static constexpr int MAX_PACKED_SIZE = sizeof(PackedBoard) + 2 + 4 * MAX_PLIES;
 
     PackedBoard start;
     uint8_t result;
@@ -99,7 +100,7 @@ struct PosChain {
     struct MoveScore {
         Move move;
         int16_t score;
-    } seq[MAX_SEQ_LEN];
+    } seq[MAX_PLIES];
 
     void write_to_stream(std::ostream &os) const;
     bool load_from_stream(std::istream &is);
