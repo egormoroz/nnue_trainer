@@ -6,6 +6,8 @@ from halfkp import *
 
 import chess
 
+from ranger21 import Ranger21
+
 WDL_SCALE = 162
 
 S_W = 64
@@ -70,8 +72,12 @@ class Model(nn.Module):
         pred = self.forward(wft_ics, wft_vals, bft_ics, bft_vals, stm)
         return pred * S_O
 
-    def configure_optimizers(self):
-        opt = torch.optim.AdamW(self.parameters())
+    def configure_optimizers(self, config):
+        # opt = torch.optim.AdamW(self.parameters())
+        opt = Ranger21(self.parameters(), lr=config.max_lr, warmdown_min_lr=config.min_lr,
+                       num_epochs=config.n_epochs, 
+                       num_batches_per_epoch=config.n_batches_per_epoch,
+                       warmdown_active=False, use_warmup=False)
         return opt
 
 

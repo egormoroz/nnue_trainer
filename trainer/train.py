@@ -112,7 +112,7 @@ class Trainer:
 
 
     def train(self, model: Model):
-        opt = model.configure_optimizers()
+        opt = model.configure_optimizers(self.config)
         cfg = self.config
         device = next(model.parameters()).device
         self.model = model
@@ -121,6 +121,8 @@ class Trainer:
 
         train_loss = 0
         val_loss = 0
+
+        n_warmup_iters = int(cfg.p_warmup * cfg.n_batches_per_epoch)
 
         for epoch in trange(cfg.n_epochs):
             epoch_lr = self.get_lr(epoch)
@@ -135,8 +137,8 @@ class Trainer:
                     batch = self.train_stream.next_batch()
                     assert batch
 
-                if epoch == 0 and cfg.p_warmup > 0:
-                    lr = lerp(batch_idx / (cfg.p_warmup * cfg.n_batches_per_epoch), 0, epoch_lr)
+                if epoch == 0 and cfg.p_warmup > 0 and batch_idx < n_warmup_iters:
+                    lr = lerp(batch_idx / n_warmup_iters, cfg.min_lr/10, epoch_lr)
                     for g in opt.param_groups:
                         g['lr'] = lr
                 else:
@@ -154,7 +156,7 @@ class Trainer:
                 cum_loss += loss.item()
                 batch_loss.update(loss.item())
 
-                t.set_description('epoch {} BL {:.4f} TL {:.4f} VL {:.4f} LR {:.2e}'.format(
+                t.set_description('epoch {} BL {:.5f} TL {:.5f} VL {:.5f} LR {:.2e}'.format(
                     epoch, batch_loss.value, train_loss, val_loss, lr))
 
             train_loss = cum_loss / cfg.n_batches_per_epoch
@@ -165,7 +167,7 @@ class Trainer:
 
 
 def train(experiment_name, train_packname, val_packname, save_every=10,
-          min_lr=1e-5, max_lr=8e-4, p_warmup=0.5, n_batches_per_epoch=2000, 
+          min_lr=1e-5, max_lr=8e-4, p_warmup=0.5, n_batches_per_epoch=6000, 
           n_epochs=200, use_factorizer=True, wdl_lambda=1.0, batch_size=16384,
           n_prefetch=4, n_workers=4, resume_from=''):
 
