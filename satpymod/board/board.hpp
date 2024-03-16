@@ -9,9 +9,9 @@
 
 class Board {
 public:
-    Board(StateInfo *si);
+    Board(StateInfo *si = nullptr);
 
-    static Board start_pos(StateInfo *si);
+    static Board start_pos(StateInfo *si = nullptr);
 
     [[nodiscard]] bool setup(Bitboard mask, const Piece *pieces, Color stm, 
             CastlingRights cr, Square en_passant);
@@ -30,8 +30,8 @@ public:
      * */
     [[nodiscard]] bool is_valid() const;
 
-    Board do_move(Move m, StateInfo *newst) const;
-    Board do_null_move(StateInfo *newst) const;
+    Board do_move(Move m, StateInfo *newst = nullptr) const;
+    Board do_null_move(StateInfo *newst = nullptr) const;
 
     /*
      * Used for:
@@ -43,6 +43,8 @@ public:
     bool see_ge(Move m, int threshold = 0) const;
 
     bool is_quiet(Move m) const;
+    
+    bool gives_check(Move m) const;
 
     void update_pin_info();
 
@@ -106,7 +108,7 @@ private:
 
     uint8_t half_moves_;
     uint8_t plies_from_null_;
-    uint8_t full_moves_;
+    uint16_t full_moves_;
 
     StateInfo *si_;
 };

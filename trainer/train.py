@@ -55,6 +55,11 @@ def lerp(t, a, b):
     return (1 - t) * a + t * b
 
 
+def exerp(t, a, b, gamma=1.0):
+    assert a > 0 and b > 0
+    alpha, beta = a, np.log(b / a)
+    return alpha * np.exp(beta * t**gamma)
+
 class Trainer:
     def __init__(self, config: Config):
         self.config = config
@@ -63,28 +68,26 @@ class Trainer:
         self.on_epoch_end = None
 
         self.train_stream = ffi.BatchStream(
-            config.train_packname + '.bin',
-            config.train_packname + '.index',
+            config.train_packname,
             n_prefetch=config.n_prefetch,
             n_workers=config.n_workers,
             batch_size=config.batch_size,
             add_virtual=config.use_factorizer,
+            wait_on_end=False,
         )
 
         self.val_stream = ffi.BatchStream(
-            config.val_packname + '.bin',
-            config.val_packname + '.index',
+            config.val_packname,
             n_prefetch=config.n_prefetch,
             n_workers=config.n_workers,
             batch_size=config.batch_size,
             add_virtual=config.use_factorizer,
+            wait_on_end=True,
         )
 
 
-    def get_lr(self, epoch):
-        cfg = self.config
-        return cfg.min_lr + 0.5 * (cfg.max_lr-cfg.min_lr) \
-                * (1 + np.cos(epoch / cfg.n_epochs * np.pi))
+    def get_lr(self, t, max_t, eta_min, eta_max):
+        return eta_min + 0.5 * (eta_max-eta_min) * (1 + np.cos(t / max_t * np.pi))
 
     @torch.no_grad()
     def compute_val_loss(self):
@@ -122,27 +125,37 @@ class Trainer:
         train_loss = 0
         val_loss = 0
 
-        n_warmup_iters = int(cfg.p_warmup * cfg.n_batches_per_epoch)
+        step = 0
+        total_i = cfg.n_batches_per_epoch
+        total_steps = cfg.n_batches_per_epoch * cfg.n_epochs
+        eta_min, eta_max = cfg.min_lr, cfg.max_lr
 
         for epoch in trange(cfg.n_epochs):
-            epoch_lr = self.get_lr(epoch)
-
-            for g in opt.param_groups:
-                g['lr'] = epoch_lr
-
             cum_loss = 0
             for batch_idx in (t := trange(cfg.n_batches_per_epoch)):
+                abs_step = epoch * cfg.n_batches_per_epoch + batch_idx
                 batch = self.train_stream.next_batch()
-                if not batch:
-                    batch = self.train_stream.next_batch()
-                    assert batch
+                assert batch
 
-                if epoch == 0 and cfg.p_warmup > 0 and batch_idx < n_warmup_iters:
-                    lr = lerp(batch_idx / n_warmup_iters, cfg.min_lr/10, epoch_lr)
-                    for g in opt.param_groups:
-                        g['lr'] = lr
+                lr = self.get_lr(step, total_i, eta_min, eta_max)
+                if step == total_i:
+                    step = 0
+                    total_i *= 2
+
+                    steps_left = total_steps - abs_step + 1
+                    r = abs_step / total_steps
+                    if total_i + total_i * 2 > steps_left:
+                        total_i = steps_left
+                        # r = 1
+
+                    ## eta_min = lerp(r, cfg.min_lr, cfg.min_lr/10)
+                    # eta_max = lerp(r, cfg.max_lr, cfg.min_lr)
+                    eta_max = exerp(r, cfg.max_lr, cfg.min_lr, 1.5)
                 else:
-                    lr = epoch_lr
+                    step += 1
+
+                for g in opt.param_groups:
+                    g['lr'] = lr
 
                 wft_ics, wft_vals, bft_ics, bft_vals, stm, score, result = batch.to_torch(device)
                 pred = model(wft_ics, wft_vals, bft_ics, bft_vals, stm)
@@ -197,11 +210,20 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
     )
     assert run
 
+    best_val_loss = float('+inf')
     def on_epoch_end(epoch, train_loss, val_loss):
+        nonlocal best_val_loss
         wandb.log({
             'train_loss': train_loss,
             'val_loss': val_loss,
         })
+
+        if val_loss < best_val_loss:
+            name = 'best_net.pt'
+            path = f'{config.experiment_name}/{name}'
+            torch.save(model.state_dict(), path)
+            run.log_model(path, name=name)
+            best_val_loss = val_loss
 
         if epoch % config.save_every == 0 or epoch + 1 == config.n_epochs:
             name = f'net_{epoch}.pt'

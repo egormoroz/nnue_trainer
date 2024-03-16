@@ -1,13 +1,13 @@
 #ifndef BATCHSTREAM_HPP
 #define BATCHSTREAM_HPP
 
-#include <queue>
+#include <deque>
+#include <vector>
 #include <mutex>
 #include <thread>
 #include <atomic>
 
 #include "batch.hpp"
-#include "../pack.hpp"
 
 template<typename T>
 class Queue {
@@ -23,7 +23,7 @@ public:
             non_full_.wait(lck);
         if (stop_) return;
 
-        q_.push(std::forward<U>(u));
+        q_.push_back(std::forward<U>(u));
         lck.unlock();
 
         non_empty_.notify_one();
@@ -38,11 +38,18 @@ public:
             return false;
 
         t = std::move(q_.front());
-        q_.pop();
+        q_.pop_front();
         lck.unlock();
 
         non_full_.notify_one();
         return true;
+    }
+
+    template<typename F>
+    void apply(F &&f) {
+        std::lock_guard<std::mutex> lck(m_);
+        for (auto &i: q_)
+            f(i);
     }
 
     void stop() {
@@ -61,18 +68,20 @@ private:
     std::condition_variable non_empty_;
     std::condition_variable non_full_;
     std::mutex m_;
-    std::queue<T> q_;
+    std::deque<T> q_;
 };
 
 class BatchStream {
 public:
-    BatchStream(const char* bin_fpath, const char* index_fpath,
-            int n_prefetch, int n_workers, int batch_size, bool add_virtual);
+    BatchStream(const char* bin_fpath, int n_prefetch, int n_workers, 
+            int batch_size, bool add_virtual, bool wait_on_end);
 
     // (!) the previous batch is destroyed.
     // EOF is denoted by an empty batch
     SparseBatch* next_batch();
     void reset();
+
+    void stop();
 
     ~BatchStream();
 
@@ -92,9 +101,8 @@ private:
     void file_reader_routine();
     void worker_routine();
 
-    // Group into batches and push them to batch queue.
-    // This gets called by worker threads and potentially blocks on batch_queue_ mutex
-    void collect_leftovers(const TrainingEntry *entries, int n_entries);
+    void collect_leftovers(const TrainingEntry *entries, size_t n_entries,
+            bool flush_nonfull = false);
 
     SparseBatch allocate_batch();
     void free_batch(SparseBatch b);
@@ -102,23 +110,23 @@ private:
     Chunk allocate_chunk();
     void free_chunk(Chunk ch);
 
-    // all of these are constant
-    int batch_size_;
-    bool add_virtual_;
-    int max_chunk_size_; //calculated based on index
+    const int batch_size_;
+    const bool add_virtual_;
 
-    int n_workers_;
+    const int n_workers_;
 
     char bin_fpath_[256];
-    char index_fpath_[256];
-    PackIndex index_;
 
-    // these are mutable
     std::atomic_bool exit_;
     // This gets incremented ONLY after all data has been successfully pushed to the batch queue.
     // Thus we can gurantee than next_batch has seen all data exactly once 
     // if n_chunks_processed_ == index_.n_blocks
     std::atomic_uint64_t n_chunks_processed_;
+    // TODO: better name needed. 
+    // This flag basically means if we are in the "infinite" mode, where we loop through 
+    // the whole dataset infinitely. If we need to do a single pass
+    // through the whole dataset, then this flag is true.
+    const bool wait_on_end_;
 
     std::mutex epoch_done_mtx_;
     std::condition_variable chunk_done_;

@@ -19,11 +19,10 @@ int main() {
 #endif
 
     using clk_t = std::chrono::steady_clock;
+    constexpr char path[] = "d6v6_200mil_2.bin";
 
-    const char *bin_fpath = "d6nnv4.bin";
-    const char *index_fpath = "d6nnv4.index";
+    BatchStream stream(path, 1, 8, 1024*16, false, false);
 
-    BatchStream stream(bin_fpath, index_fpath, 1, 4, 16384, false);
     auto start = clk_t::now();
     int batch_per_sec = 0;
     for (int i = 0; ; ++i) {
@@ -37,6 +36,7 @@ int main() {
         }
     }
 
+    printf("done!\n");
 
     return 0;
 }
