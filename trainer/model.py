@@ -25,10 +25,23 @@ S_O = 256
 class Model(nn.Module):
     def __init__(self, n_fts):
         super().__init__()
-        self.ft = FeatureTransformer(n_fts, 256)
+        self.ft = FeatureTransformer(n_fts, 256 + 1)
         self.fc1 = nn.Linear(512, 32)
         self.fc2 = nn.Linear(32, 32)
         self.fc_out = nn.Linear(32, 1)
+
+        self._init_psqt()
+
+    @torch.no_grad()
+    def _init_psqt(self):
+        p_vals = [0, 82, 337, 365, 477, 1025,  0]
+        for pt in range(chess.PAWN, chess.KING):
+            p_idx = 2 * pt
+            p_value = p_vals[pt] / S_O
+            for psq in range(N_SQ):
+                for ksq in range(N_SQ):
+                    i_real = psq + N_SQ * p_idx + N_SQ*N_PC * ksq
+                    self.ft.weight.data[i_real, -1] = p_value
 
     @torch.no_grad()
     def coalesce_transformer(self):
@@ -44,6 +57,9 @@ class Model(nn.Module):
         wfts = self.ft(wft_ics, wft_vals)
         bfts = self.ft(bft_ics, bft_vals)
 
+        wfts, wpsqt = torch.split(wfts, 256, dim=1)
+        bfts, bpsqt = torch.split(bfts, 256, dim=1)
+
         x = (1 - stm) * torch.cat((wfts, bfts), dim=-1)
         x += stm * torch.cat((bfts, wfts), dim=-1)
 
@@ -51,6 +67,8 @@ class Model(nn.Module):
         x = torch.clip(self.fc1(x), 0, 1)
         x = torch.clip(self.fc2(x), 0, 1)
         x = self.fc_out(x)
+
+        x = x + (wpsqt - bpsqt) * (0.5 - stm)
         return x
 
     @torch.no_grad()
@@ -79,7 +97,6 @@ class Model(nn.Module):
                        num_batches_per_epoch=config.n_batches_per_epoch,
                        warmdown_active=False, use_warmup=False)
         return opt
-
 
 
 def compute_loss(pred, score, game_result, lambda_):
