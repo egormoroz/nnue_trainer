@@ -5,11 +5,15 @@ import halfkp
 
 
 def write_transformer(buf: bytearray, transformer):
-    bias = transformer.bias.data.ravel()
+    bias = transformer.bias.data[:-1].ravel()
     bias = bias.mul(127).round().to(torch.int16)
     buf.extend(bias.numpy().tobytes())
+
+    psqt = transformer.weight.data[:, -1].ravel()
+    psqt = psqt.mul(S_O).round().to(torch.int32)
+    buf.extend(psqt.numpy().tobytes())
     
-    weight = transformer.weight.data.ravel()
+    weight = transformer.weight.data[:, :-1].ravel()
     weight = weight.mul(127).round().to(torch.int16)
     buf.extend(weight.numpy().tobytes())
 

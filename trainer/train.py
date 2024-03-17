@@ -126,7 +126,7 @@ class Trainer:
         val_loss = 0
 
         step = 0
-        total_i = cfg.n_batches_per_epoch
+        total_i = 4 * cfg.n_batches_per_epoch
         total_steps = cfg.n_batches_per_epoch * cfg.n_epochs
         eta_min, eta_max = cfg.min_lr, cfg.max_lr
 
@@ -140,11 +140,12 @@ class Trainer:
                 lr = self.get_lr(step, total_i, eta_min, eta_max)
                 if step == total_i:
                     step = 0
-                    total_i *= 2
+                    total_i = int(total_i * 1.5)
+                    # total_i *= 2
 
                     steps_left = total_steps - abs_step + 1
                     r = abs_step / total_steps
-                    if total_i + total_i * 2 > steps_left:
+                    if total_i + int(total_i * 1.5) > steps_left:
                         total_i = steps_left
                         # r = 1
 

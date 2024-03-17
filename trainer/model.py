@@ -35,13 +35,16 @@ class Model(nn.Module):
     @torch.no_grad()
     def _init_psqt(self):
         p_vals = [0, 82, 337, 365, 477, 1025,  0]
+        self.ft.weight[:, -1] = 0
+        self.ft.bias[-1] = 0
         for pt in range(chess.PAWN, chess.KING):
-            p_idx = 2 * pt
             p_value = p_vals[pt] / S_O
             for psq in range(N_SQ):
                 for ksq in range(N_SQ):
-                    i_real = psq + N_SQ * p_idx + N_SQ*N_PC * ksq
-                    self.ft.weight.data[i_real, -1] = p_value
+                    widx = halfkp_idx(chess.WHITE, ksq, psq, chess.Piece(pt, chess.WHITE))
+                    bidx = halfkp_idx(chess.WHITE, ksq, psq, chess.Piece(pt, chess.BLACK))
+                    self.ft.weight.data[widx, -1] = p_value
+                    self.ft.weight.data[bidx, -1] = -p_value
 
     @torch.no_grad()
     def coalesce_transformer(self):
@@ -106,3 +109,4 @@ def compute_loss(pred, score, game_result, lambda_):
     wdl_pred = torch.sigmoid(pred * S_O / WDL_SCALE)
     loss = torch.pow(wdl_pred - wdl_target, 2).mean()
     return loss
+
