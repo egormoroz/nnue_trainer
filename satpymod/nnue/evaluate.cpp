@@ -8,9 +8,9 @@
 
 #include "crelu.hpp"
 
-// #define NNUE_DEBUG
-
 namespace {
+
+bool NNUE_INITIALIZED = false;
 
 Network net;
 TransformerLayer transformer;
@@ -24,9 +24,6 @@ void refresh_accumulator(
         Accumulator &acc,
         Color perspective) 
 {
-#ifdef NONNUE
-    return;
-#else
     Square ksq = b.king_square(perspective);
     ksq = orient(perspective, ksq);
 
@@ -43,7 +40,6 @@ void refresh_accumulator(
 
     transformer.refresh_accumulator(acc, 
         FtSpan(features, features + n_features), perspective);
-#endif
 }
 
 // ksq must be relative
@@ -52,23 +48,20 @@ bool update_accumulator(
         Color side,
         Square ksq) 
 {
-#ifdef NONNUE
-    return true;
-#else
     if (si->acc.computed[side])
         return true;
 
-    if (si->deltas[0].piece == make_piece(side, KING))
+    if (!si->previous || si == si->previous)
         return false;
 
-    if (!si->previous)
+    // deltas aren't initialized, so an extra check is needed
+    if (si->nb_deltas && si->deltas[0].piece == make_piece(side, KING))
         return false;
 
     if (!update_accumulator(si->previous, side, ksq))
         return false;
 
     memcpy(si->acc.v[side], si->previous->acc.v[side], nnspecs::HALFKP * 2);
-    si->acc.psqt[side] = si->previous->acc.psqt[side];
 
     if (!si->nb_deltas) {
         si->acc.computed[side] = true;
@@ -101,14 +94,14 @@ bool update_accumulator(
     );
 
     return true;
-#endif
 }
 
 
 int32_t evaluate(const Board &b) {
-#ifdef NONNUE
-    return VALUE_MATE;
-#else
+    if (!NNUE_INITIALIZED) {
+        printf("NNUE not initialized, aborting...\n");
+        std::abort();
+    }
 
     StateInfo *si = b.get_stateinfo();
     Color stm = b.side_to_move();
@@ -126,36 +119,24 @@ int32_t evaluate(const Board &b) {
     scale_and_clamp<nnspecs::HALFKP>(si->acc.v[stm], transformed);
     scale_and_clamp<nnspecs::HALFKP>(si->acc.v[~stm], transformed + nnspecs::HALFKP);
 
-    /* int32_t positional = net.propagate(transformed); */
-    /* int32_t psqt = (si->acc.psqt[stm] + si->acc.psqt[~stm]) / 2; */
-    /* psqt *= stm == WHITE ? 1 : -1; */
-
-    /* return positional + psqt; */
-    int32_t score = net.propagate(transformed);
-    /* score *= stm == WHITE ? 1 : -1; */
-    return score;
-#endif
+    return net.propagate(transformed);
 }
 
 bool load_parameters(const char *path) {
-#ifdef NONNUE
-    return true;
-#else
-
     std::ifstream fin(path, std::ios::binary);
     if (!fin.is_open()) {
         printf("failed to open parameters file\n");
         return false;
     }
 
-    fin.seekg(189+4);
+    /* fin.seekg(189+4); */
 
     if (!transformer.load_parameters(fin)) {
         printf("failed to load tranformer parameters\n");
         return false;
     }
 
-    fin.ignore(4);
+    /* fin.ignore(4); */
     if (!net.load_parameters(fin)) {
         printf("failed to load parameters\n");
         return false;
@@ -163,8 +144,8 @@ bool load_parameters(const char *path) {
 
     printf("successfully loaded nnue parameters\n");
 
+    NNUE_INITIALIZED = true;
     return true;
-#endif
 }
 
 } //nnue

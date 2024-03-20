@@ -1,6 +1,7 @@
 #ifndef BATCHSTREAM_HPP
 #define BATCHSTREAM_HPP
 
+#include <condition_variable>
 #include <deque>
 #include <vector>
 #include <mutex>

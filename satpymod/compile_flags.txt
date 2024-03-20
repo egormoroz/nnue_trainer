@@ -3,3 +3,4 @@
 -Wall
 -Wextra
 -march=native
+-lpthread

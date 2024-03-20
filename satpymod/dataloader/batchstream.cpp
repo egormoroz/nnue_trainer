@@ -1,4 +1,5 @@
 #include "batchstream.hpp"
+#include <cstring>
 #include <vector>
 #include <fstream>
 #include <cstdio>
@@ -13,7 +14,7 @@ BatchStream::BatchStream(const char* bin_fpath, int n_prefetch,
       chunk_queue_(n_workers), batch_queue_(n_prefetch)
 {
     te_buffer_.reserve(batch_size_ * n_workers);
-    strcpy_s(bin_fpath_, bin_fpath);
+    strcpy(bin_fpath_, bin_fpath);
 
     cur_batch_ = allocate_batch();
 

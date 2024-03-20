@@ -1,14 +1,11 @@
 #pragma once
 
 #include <cstdint>
-#include "../config.hpp"
 #include "nnarch.hpp"
+#include "simd.hpp"
 
 struct Accumulator {
-#ifndef NONNUE
-    int16_t v[2][nnspecs::HALFKP];
-    int32_t psqt[2];
-#endif
+    alignas(SIMD_ALIGN) int16_t v[2][nnspecs::HALFKP];
     bool computed[2];
 };
 

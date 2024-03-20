@@ -6,7 +6,7 @@
     #define EXPORT extern "C" __declspec(dllexport)
 #elif defined(__GNUC__)
     //  GCC
-    #define extern "C" EXPORT __attribute__((visibility("default")))
+    #define EXPORT extern "C" __attribute__((visibility("default")))
 #else
     //  do nothing and hope for the best?
     #define EXPORT

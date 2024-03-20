@@ -10,7 +10,7 @@ struct Delta {
 };
 
 struct StateInfo {
-    Accumulator acc;
+    alignas(SIMD_ALIGN) Accumulator acc;
 
     Delta deltas[3];
     int nb_deltas = 0;
