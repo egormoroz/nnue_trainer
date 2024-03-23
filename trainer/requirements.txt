@@ -1,0 +1,8 @@
+chess==1.10.0
+cupy==13.0.0
+fire==0.6.0
+matplotlib==3.8.0
+numpy==1.26.4
+torch==2.2.1
+tqdm==4.65.0
+wandb==0.16.4

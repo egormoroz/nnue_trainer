@@ -4,6 +4,8 @@
 #include <fstream>
 #include <cstdio>
 
+#include <random>
+
 #include "../pack.hpp"
 
 
@@ -47,55 +49,35 @@ void BatchStream::file_reader_routine() {
         return;
     }
 
-    size_t chunk_counter = 0;
+    fin_pack.seekg(0, std::ios::end);
+    size_t file_size = fin_pack.tellg();
+    fin_pack.clear();
+    fin_pack.seekg(0);
+
+    if (file_size < ChunkHead::SIZE) {
+        fprintf(stderr, "[ERROR] BatchStream::file_reader_routine: no chunks found\n");
+        stop();
+        return;
+    }
+
+    std::vector<size_t> chunk_offs;
+    chunk_offs.reserve((file_size + PACK_CHUNK_SIZE - 1) / PACK_CHUNK_SIZE);
+    for (size_t i = 0; i < file_size; i += PACK_CHUNK_SIZE)
+        chunk_offs.push_back(i);
+
+    std::default_random_engine rng(uint32_t(std::time(0)));
+    std::uniform_int_distribution<size_t> dist(0, chunk_offs.size() - 1);
 
     while (!exit_) {
         Chunk ch = allocate_chunk();
-        if (fin_pack.read(ch.data, PACK_CHUNK_SIZE)) {
-            ch.size = PACK_CHUNK_SIZE;
-            chunk_queue_.push(ch);
-            ++chunk_counter;
-            continue;
-        }
 
-        // Push the final chunk
-        if (fin_pack.gcount() >= (std::streamsize)ChunkHead::SIZE) {
-            ch.size = fin_pack.gcount();
-            chunk_queue_.push(ch);
-            ++chunk_counter;
-        } else {
-            free_chunk(ch);
-        }
-
-        if (!chunk_counter) {
-            fprintf(stderr, "[ERROR] BatchStream::file_reader_routine: no chunks found\n");
-            stop();
-            break;
-        }
-
+        size_t off = chunk_offs[dist(rng)];
         fin_pack.clear();
-        fin_pack.seekg(0);
+        fin_pack.seekg(off);
 
-        size_t n_chunks_read = chunk_counter;
-        chunk_counter = 0;
-
-        if (!wait_on_end_)
-            continue;
-
-        // let's make sure all data has been processed before starting new round
-        {
-            std::unique_lock<std::mutex> lck(epoch_done_mtx_);
-            while (n_chunks_processed_ < n_chunks_read && !exit_)
-                chunk_done_.wait(lck);
-        }
-
-        collect_leftovers(nullptr, 0, true);
-
-        n_chunks_processed_ = 0;
-
-        SparseBatch dummy = allocate_batch(); 
-        dummy.size = 0;
-        batch_queue_.push(dummy);
+        fin_pack.read(ch.data, PACK_CHUNK_SIZE);
+        ch.size = fin_pack.gcount();
+        chunk_queue_.push(ch);
     }
 }
 
@@ -174,13 +156,13 @@ void BatchStream::worker_routine() {
         if ((const char*)ptr - ch.data != head.body_size + head.SIZE)
             fprintf(stderr, "[WARNINIG] BatchStream::worker_routine: chunk size mismatch.\n");
 
-        if (!exit_ && wait_on_end_) {
-            collect_leftovers(thread_te_buf.data(), thread_te_buf.size());
-            thread_te_buf.clear();
+        /* if (!exit_ && wait_on_end_) { */
+        /*     collect_leftovers(thread_te_buf.data(), thread_te_buf.size()); */
+        /*     thread_te_buf.clear(); */
 
-            ++n_chunks_processed_;
-            chunk_done_.notify_all();
-        }
+        /*     ++n_chunks_processed_; */
+        /*     chunk_done_.notify_all(); */
+        /* } */
 
 skip_chunk:
         free_chunk(ch);

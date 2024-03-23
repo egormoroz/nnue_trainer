@@ -4,12 +4,14 @@ import ffi
 
 import os
 import torch
-import numpy as np
+import math
 from tqdm.auto import trange
 import dataclasses
 import fire
 
 import wandb
+
+torch.set_float32_matmul_precision('high')
 
 class EMA:
     def __init__(self, initial=None, k=0.1):
@@ -57,8 +59,8 @@ def lerp(t, a, b):
 
 def exerp(t, a, b, gamma=1.0):
     assert a > 0 and b > 0
-    alpha, beta = a, np.log(b / a)
-    return alpha * np.exp(beta * t**gamma)
+    alpha, beta = a, math.log(b / a)
+    return alpha * math.exp(beta * t**gamma)
 
 class Trainer:
     def __init__(self, config: Config):
@@ -87,7 +89,7 @@ class Trainer:
 
 
     def get_lr(self, t, max_t, eta_min, eta_max):
-        return eta_min + 0.5 * (eta_max-eta_min) * (1 + np.cos(t / max_t * np.pi))
+        return eta_min + 0.5 * (eta_max-eta_min) * (1 + math.cos(t / max_t * math.pi))
 
     @torch.no_grad()
     def compute_val_loss(self):
@@ -99,10 +101,9 @@ class Trainer:
         self.model.eval()
 
         cum_loss, n = 0, 0
-        while True:
+        for _ in range(100):
             batch = self.val_stream.next_batch()
-            if not batch:
-                break
+            assert batch
 
             wft_ics, wft_vals, bft_ics, bft_vals, stm, score, result = batch.to_torch(device)
             pred = self.model(wft_ics, wft_vals, bft_ics, bft_vals, stm)
@@ -125,35 +126,41 @@ class Trainer:
         train_loss = 0
         val_loss = 0
 
+        restart_idx = 0
         step = 0
-        total_i = 4 * cfg.n_batches_per_epoch
         total_steps = cfg.n_batches_per_epoch * cfg.n_epochs
+        n_restarts = 8
+
+        total_i = total_steps / (2**n_restarts - 1)
+        total_i = int(math.ceil(total_i))
+
         eta_min, eta_max = cfg.min_lr, cfg.max_lr
+
+        warmup_steps = int(cfg.p_warmup * cfg.n_batches_per_epoch)
 
         for epoch in trange(cfg.n_epochs):
             cum_loss = 0
             for batch_idx in (t := trange(cfg.n_batches_per_epoch)):
-                abs_step = epoch * cfg.n_batches_per_epoch + batch_idx
                 batch = self.train_stream.next_batch()
                 assert batch
 
-                lr = self.get_lr(step, total_i, eta_min, eta_max)
-                if step == total_i:
-                    step = 0
-                    total_i = int(total_i * 1.5)
-                    # total_i *= 2
-
-                    steps_left = total_steps - abs_step + 1
-                    r = abs_step / total_steps
-                    if total_i + int(total_i * 1.5) > steps_left:
-                        total_i = steps_left
-                        # r = 1
-
-                    ## eta_min = lerp(r, cfg.min_lr, cfg.min_lr/10)
-                    # eta_max = lerp(r, cfg.max_lr, cfg.min_lr)
-                    eta_max = exerp(r, cfg.max_lr, cfg.min_lr, 1.5)
+                if epoch == 0 and batch_idx < warmup_steps:
+                    lr = lerp(batch_idx/warmup_steps, cfg.min_lr, cfg.max_lr)
                 else:
+                    lr = self.get_lr(step, total_i, eta_min, eta_max)
                     step += 1
+
+                if step >= total_i:
+                    restart_idx += 1
+                    step = 0
+                    total_i *= 2
+                    abs_step = epoch * cfg.n_batches_per_epoch + batch_idx
+                    total_i = min(total_i, total_steps - abs_step + 1)
+                    
+                    # r = abs_step / total_steps
+                    r = restart_idx / n_restarts
+                    eta_min = exerp(r, cfg.min_lr, cfg.min_lr / 10, 1.6)
+                    eta_max = exerp(r, cfg.max_lr, cfg.max_lr / 10, 1.6)
 
                 for g in opt.param_groups:
                     g['lr'] = lr
@@ -197,11 +204,13 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
 
     os.makedirs(experiment_name, exist_ok=True)
 
-    ffi.load_module('../build/Release/satpymod.dll')
+    # ffi.load_module('../build/Release/satpymod.dll')
+    ffi.load_module('../build/libsatpymod.so')
 
     model = Model(halfkp.N_FT + halfkp.N_VIRT_FT * use_factorizer).cuda()
     if resume_from:
         print(model.load_state_dict(torch.load(resume_from)))
+    model.compile()
 
     wandb.login()
     run = wandb.init(
