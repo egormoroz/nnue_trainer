@@ -3,10 +3,34 @@
 #include <vector>
 #include <fstream>
 #include <cstdio>
+#include <cmath>
 
 #include <random>
 
 #include "../pack.hpp"
+
+constexpr inline float score_result_prob(Color stm, int score, int result) {
+    const int remap_result[2][3] = { 
+        {  1, -1, 0 },
+        { -1,  1, 0 },
+    };
+
+    // make the score relative
+    result = remap_result[stm][result];
+
+    const float theta = 150.f;
+
+    const float w_prob = 1 / (1 + std::exp(-score / theta));
+    const float l_prob = 1 / (1 + std::exp(score / theta));
+    const float d_prob = 1 - w_prob - l_prob;
+    
+    if (result > 0)
+        return w_prob;
+    else if (result < 0)
+        return l_prob;
+    else
+        return d_prob;
+}
 
 
 BatchStream::BatchStream(const char* bin_fpath, int n_prefetch, 
@@ -87,6 +111,8 @@ void BatchStream::worker_routine() {
     std::vector<TrainingEntry> thread_te_buf;
     thread_te_buf.reserve(2 * batch_size_);
 
+    std::default_random_engine rng(uint32_t(std::time(0)));
+
     while (!exit_) {
         Chunk ch;
         if (!chunk_queue_.pop(ch))
@@ -116,7 +142,11 @@ void BatchStream::worker_routine() {
                 }
                 hash ^= cr.board.key();
 
-                bool skip_pos = cr.board.checkers() || !cr.board.is_quiet(cr.move);
+
+                const float score_prob = score_result_prob(cr.board.side_to_move(), cr.score, cr.result);
+                std::bernoulli_distribution dist(1 - score_prob);
+                bool skip_pos = cr.board.checkers() || !cr.board.is_quiet(cr.move) || dist(rng);
+
                 if (skip_pos)
                     continue;
 
