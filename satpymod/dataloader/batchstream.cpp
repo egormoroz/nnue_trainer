@@ -145,7 +145,7 @@ void BatchStream::worker_routine() {
 
                 const float score_prob = score_result_prob(cr.board.side_to_move(), cr.score, cr.result);
                 std::bernoulli_distribution dist(1 - score_prob);
-                bool skip_pos = cr.board.checkers() || !cr.board.is_quiet(cr.move) || dist(rng);
+                bool skip_pos = cr.board.checkers() || !cr.board.is_quiet(cr.move);// || dist(rng);
 
                 if (skip_pos)
                     continue;

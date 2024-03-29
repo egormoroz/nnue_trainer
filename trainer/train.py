@@ -13,6 +13,8 @@ import wandb
 
 torch.set_float32_matmul_precision('high')
 
+
+
 class EMA:
     def __init__(self, initial=None, k=0.1):
         self.value = initial
@@ -51,6 +53,8 @@ class Config:
     batch_size: int
     n_prefetch: int
     n_workers: int
+
+    n_restarts: int
 
 
 def lerp(t, a, b):
@@ -106,6 +110,7 @@ class Trainer:
             assert batch
 
             wft_ics, wft_vals, bft_ics, bft_vals, stm, score, result = batch.to_torch(device)
+
             pred = self.model(wft_ics, wft_vals, bft_ics, bft_vals, stm)
             loss = compute_loss(pred, score, result, cfg.wdl_lambda)
             cum_loss += loss.item()
@@ -129,9 +134,8 @@ class Trainer:
         restart_idx = 0
         step = 0
         total_steps = cfg.n_batches_per_epoch * cfg.n_epochs
-        n_restarts = 8
 
-        total_i = total_steps / (2**n_restarts - 1)
+        total_i = total_steps / (2**cfg.n_restarts - 1)
         total_i = int(math.ceil(total_i))
 
         eta_min, eta_max = cfg.min_lr, cfg.max_lr
@@ -158,7 +162,7 @@ class Trainer:
                     total_i = min(total_i, total_steps - abs_step + 1)
                     
                     # r = abs_step / total_steps
-                    r = restart_idx / n_restarts
+                    r = restart_idx / cfg.n_restarts
                     eta_min = exerp(r, cfg.min_lr, cfg.min_lr / 10, 1.6)
                     eta_max = exerp(r, cfg.max_lr, cfg.max_lr / 10, 1.6)
 
@@ -190,7 +194,7 @@ class Trainer:
 def train(experiment_name, train_packname, val_packname, save_every=10,
           min_lr=1e-5, max_lr=8e-4, p_warmup=0.5, n_batches_per_epoch=6000, 
           n_epochs=200, use_factorizer=True, wdl_lambda=1.0, batch_size=16384,
-          n_prefetch=4, n_workers=4, resume_from=''):
+          n_prefetch=4, n_workers=4, resume_from='', n_restarts=4):
 
     config = Config(
         experiment_name=experiment_name, 
@@ -199,7 +203,8 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
         n_batches_per_epoch=n_batches_per_epoch, n_epochs=n_epochs, 
         use_factorizer=use_factorizer, wdl_lambda=wdl_lambda, batch_size=batch_size,
         n_prefetch=n_prefetch, n_workers=n_workers,
-        resume_from=resume_from
+        resume_from=resume_from,
+        n_restarts=n_restarts
     )
 
     os.makedirs(experiment_name, exist_ok=True)

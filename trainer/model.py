@@ -46,9 +46,11 @@ class Model(nn.Module):
                     self.ft.weight.data[widx, -1] = p_value
                     self.ft.weight.data[bidx, -1] = -p_value
 
-    @torch.no_grad()
     def coalesce_transformer(self):
         self.ft.coalesce_weights()
+
+    def expand_transformer(self):
+        self.ft.expand_dims()
 
     @torch.no_grad()
     def _clip_weights(self):
@@ -100,6 +102,26 @@ class Model(nn.Module):
                        num_batches_per_epoch=config.n_batches_per_epoch,
                        warmdown_active=False, use_warmup=False)
         return opt
+
+    def load_state_dict(self, state_dict, *args, **kwargs):
+        n_ft_cvtfrom = state_dict['ft.weight'].shape[0]
+        n_ft_cvtto = self.ft.n_in
+
+        # temporarily adjust transformer s.t. we can load the weights
+        if n_ft_cvtto < n_ft_cvtfrom:
+            self.expand_transformer()
+        elif n_ft_cvtto > n_ft_cvtfrom:
+            self.coalesce_transformer()
+
+        res = super().load_state_dict(state_dict, *args, **kwargs)
+
+        if n_ft_cvtto < n_ft_cvtfrom:
+            self.coalesce_transformer()
+        elif n_ft_cvtto > n_ft_cvtfrom:
+            self.expand_dims()
+
+        return res
+
 
 
 def compute_loss(pred, score, game_result, lambda_):
