@@ -2,6 +2,7 @@ import torch
 from model import *
 import fire
 import halfkp
+from pathlib import Path
 
 
 def write_transformer(buf: bytearray, transformer):
@@ -41,7 +42,7 @@ def serialize(buf: bytearray, model: Model):
     write_layer(buf, model.fc_out, output=True)
 
 
-def serialize_cli(pt_path_in, nnue_path_out):
+def serialize_net(pt_path_in, nnue_path_out):
     d = torch.load(pt_path_in, map_location=torch.device('cpu'))
     n_ft = d['ft.weight'].shape[0]
     model = Model(n_ft)
@@ -54,6 +55,15 @@ def serialize_cli(pt_path_in, nnue_path_out):
     serialize(buf, model)
     with open(nnue_path_out, 'wb') as f:
         f.write(buf)
+
+def serialize_cli(*pt_files):
+    for pt_in in pt_files:
+        path = Path(pt_in)
+        folder, name = path.parent.absolute(), path.stem
+        out_path = f'{folder}/{name}.nnue'
+        
+        print(pt_in, '->', out_path)
+        serialize_net(pt_in, out_path)
 
 
 if __name__ == '__main__':

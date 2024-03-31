@@ -257,6 +257,12 @@ class FeatureTransformer(nn.Module):
         self.weight.data = halfkp.coalesce_real_virtual_weights(self.weight.data)
         self.n_in = halfkp.N_FT
 
+    @torch.no_grad()
+    def expand_dims(self):
+        self.n_in += halfkp.N_VIRT_FT
+        padding = torch.zeros((halfkp.N_VIRT_FT, self.n_out), device=self.weight.device)
+        self.weight.data = torch.cat((self.weight.data, padding))
+
     @torch._dynamo.disable()
     def forward(self, ft_ics, ft_vals):
         return FeatureTransformerSliceFunction.apply(ft_ics, ft_vals, self.weight, self.bias)
