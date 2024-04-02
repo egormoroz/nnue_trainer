@@ -58,9 +58,9 @@ class Model(nn.Module):
         self.fc2.weight.data.clip_(-127/S_W, 127/S_W)
         self.fc_out.weight.data.clip_(-127*S_A/(S_W*S_O), 127*S_A/(S_W*S_O))
 
-    def forward(self, wft_ics, wft_vals, bft_ics, bft_vals, stm):
-        wfts = self.ft(wft_ics, wft_vals)
-        bfts = self.ft(bft_ics, bft_vals)
+    def forward(self, wft_ics, bft_ics, stm):
+        wfts = self.ft(wft_ics)
+        bfts = self.ft(bft_ics)
 
         wfts, wpsqt = torch.split(wfts, 256, dim=1)
         bfts, bpsqt = torch.split(bfts, 256, dim=1)
@@ -86,13 +86,10 @@ class Model(nn.Module):
         wft_ics = torch.tensor(wft_ics, dtype=torch.int32, device=device).view(1, -1)
         bft_ics = torch.tensor(bft_ics, dtype=torch.int32, device=device).view(1, -1)
 
-        wft_vals = torch.ones((1, MAX_REAL_ACTIVE_FTS), dtype=torch.float32, device=device)
-        bft_vals = torch.ones((1, MAX_REAL_ACTIVE_FTS), dtype=torch.float32, device=device)
-
         stm = [0 if board.turn == chess.WHITE else 1]
         stm = torch.tensor(stm, dtype=torch.float32, device=device).view(1, 1)
 
-        pred = self.forward(wft_ics, wft_vals, bft_ics, bft_vals, stm)
+        pred = self.forward(wft_ics, bft_ics, stm)
         return pred * S_O
 
     def configure_optimizers(self, config):

@@ -54,14 +54,11 @@ class SparseBatch(ctypes.Structure):
         wft_ics = torch.from_numpy(wft_ics).to(device, non_blocking=True)
         bft_ics = torch.from_numpy(bft_ics).to(device, non_blocking=True)
 
-        wft_vals = torch.ones_like(wft_ics, dtype=torch.float32)
-        bft_vals = torch.ones_like(bft_ics, dtype=torch.float32)
-
         stm = torch.from_numpy(stm).pin_memory().to(device, non_blocking=True)
         score = torch.from_numpy(score).pin_memory().to(device, non_blocking=True)
         result = torch.from_numpy(result).pin_memory().to(device, non_blocking=True)
 
-        return wft_ics, wft_vals, bft_ics, bft_vals, stm, score, result
+        return wft_ics, bft_ics, stm, score, result
 
     def __repr__(self) -> str:
         return f'SparseBatch(size={self.size}, max_active_fts={self.max_active_fts})'
