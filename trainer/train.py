@@ -8,7 +8,7 @@ from tqdm.auto import trange
 import dataclasses
 import fire
 
-import wandb
+# import wandb
 
 from testnets import NetTester, TestConfig
 
@@ -223,23 +223,23 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
         print(model.load_state_dict(torch.load(resume_from)))
     model.compile()
 
-    wandb.login()
-    run = wandb.init(
-        project='nnue',
-        name=config.experiment_name,
-        config=dataclasses.asdict(config),
-    )
-    assert run
+    # wandb.login()
+    # run = wandb.init(
+    #     project='nnue',
+    #     name=config.experiment_name,
+    #     config=dataclasses.asdict(config),
+    # )
+    # assert run
 
     best_val_loss = float('+inf')
     all_results = []
 
     def on_epoch_end(epoch, train_loss, val_loss):
         nonlocal best_val_loss
-        wandb.log({
-            'train_loss': train_loss,
-            'val_loss': val_loss,
-        })
+        # wandb.log({
+        #     'train_loss': train_loss,
+        #     'val_loss': val_loss,
+        # })
         
         results = tester.get_results()
         all_results.extend(results)
@@ -250,7 +250,7 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
             print()
             for name, elo, err in results:
                 print('{} {} +/- {}'.format(name, elo, err))
-                wandb.log({ 'elo_diff': elo })
+                # wandb.log({ 'elo_diff': elo })
 
             print('Top 3 nets:')
             for name, elo, err in all_results[:3]:
@@ -262,7 +262,7 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
             path = f'{config.experiment_name}/{name}'
             torch.save(model.state_dict(), path)
 
-            tester.enqueue_net(f'net_{epoch}')
+            # tester.enqueue_net(f'net_{epoch}')
             # run.log_model(path, name=name)
 
     trainer = Trainer(config)

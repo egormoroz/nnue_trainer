@@ -5,11 +5,15 @@ from pathlib import Path
 
 
 def write_transformer(buf: bytearray, transformer):
-    bias = transformer.bias.data.ravel()
+    psqt = transformer.weight.data[:, -1].ravel()
+    psqt = psqt.mul(S_A).round().to(torch.int16)
+    buf.extend(psqt.numpy().tobytes())
+
+    bias = transformer.bias.data[:-1].ravel()
     bias = bias.mul(S_A).round().to(torch.int16)
     buf.extend(bias.numpy().tobytes())
     
-    weight = transformer.weight.data.ravel()
+    weight = transformer.weight.data[:, :-1].ravel()
     weight = weight.mul(S_A).round().to(torch.int16)
     buf.extend(weight.numpy().tobytes())
 
