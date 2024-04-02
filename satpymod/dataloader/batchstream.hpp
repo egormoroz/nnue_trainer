@@ -74,11 +74,8 @@ private:
 
 class BatchStream {
 public:
-    BatchStream(const char* bin_fpath, int n_prefetch, int n_workers, 
-            int batch_size, bool add_virtual, bool wait_on_end);
+    BatchStream(const char* bin_fpath, int n_prefetch, int n_workers, int batch_size);
 
-    // (!) the previous batch is destroyed.
-    // EOF is denoted by an empty batch
     SparseBatch* next_batch();
     void reset();
 
@@ -112,25 +109,12 @@ private:
     void free_chunk(Chunk ch);
 
     const int batch_size_;
-    const bool add_virtual_;
 
     const int n_workers_;
 
     char bin_fpath_[256];
 
     std::atomic_bool exit_;
-    // This gets incremented ONLY after all data has been successfully pushed to the batch queue.
-    // Thus we can gurantee than next_batch has seen all data exactly once 
-    // if n_chunks_processed_ == index_.n_blocks
-    std::atomic_uint64_t n_chunks_processed_;
-    // TODO: better name needed. 
-    // This flag basically means if we are in the "infinite" mode, where we loop through 
-    // the whole dataset infinitely. If we need to do a single pass
-    // through the whole dataset, then this flag is true.
-    const bool wait_on_end_;
-
-    std::mutex epoch_done_mtx_;
-    std::condition_variable chunk_done_;
 
     std::mutex te_buffer_mtx_;
     std::vector<TrainingEntry> te_buffer_;

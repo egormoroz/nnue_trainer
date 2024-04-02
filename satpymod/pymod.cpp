@@ -24,12 +24,11 @@ struct DLLINIT {
 };
 static DLLINIT __dllinit;
 
-BatchStream* create_batch_stream(
-        const char *bin_fpath, int n_prefetch, int n_workers, 
-        int batch_size, int add_virtual, int wait_on_end)
+BatchStream* create_batch_stream(const char *bin_fpath, int n_prefetch, 
+        int n_workers, int batch_size)
 {
     assert(n_prefetch > 0 && batch_size > 0 && bin_fpath && n_workers > 0);
-    return new BatchStream(bin_fpath, n_prefetch, n_workers, batch_size, add_virtual, wait_on_end);
+    return new BatchStream(bin_fpath, n_prefetch, n_workers, batch_size);
 }
 
 void destroy_batch_stream(BatchStream *bs) {

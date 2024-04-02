@@ -1,5 +1,4 @@
 from model import Model, compute_loss
-import halfkp
 import ffi
 
 import os
@@ -11,8 +10,9 @@ import fire
 
 import wandb
 
-torch.set_float32_matmul_precision('high')
+from testnets import NetTester, TestConfig
 
+torch.set_float32_matmul_precision('high')
 
 
 class EMA:
@@ -46,7 +46,6 @@ class Config:
     n_batches_per_epoch: int
     n_epochs: int
 
-    use_factorizer: bool
     wdl_lambda: float
 
     # dataloader config
@@ -77,9 +76,7 @@ class Trainer:
             config.train_packname,
             n_prefetch=config.n_prefetch,
             n_workers=config.n_workers,
-            batch_size=config.batch_size,
-            add_virtual=config.use_factorizer,
-            wait_on_end=False,
+            batch_size=config.batch_size
         )
 
         self.val_stream = ffi.BatchStream(
@@ -87,8 +84,6 @@ class Trainer:
             n_prefetch=config.n_prefetch,
             n_workers=config.n_workers,
             batch_size=config.batch_size,
-            add_virtual=config.use_factorizer,
-            wait_on_end=True,
         )
 
 
@@ -109,9 +104,9 @@ class Trainer:
             batch = self.val_stream.next_batch()
             assert batch
 
-            wft_ics, wft_vals, bft_ics, bft_vals, stm, score, result = batch.to_torch(device)
+            wft_ics, bft_ics, stm, score, result = batch.to_torch(device)
 
-            pred = self.model(wft_ics, wft_vals, bft_ics, bft_vals, stm)
+            pred = self.model(wft_ics, bft_ics, stm)
             loss = compute_loss(pred, score, result, cfg.wdl_lambda)
             cum_loss += loss.item()
             n += 1
@@ -169,8 +164,8 @@ class Trainer:
                 for g in opt.param_groups:
                     g['lr'] = lr
 
-                wft_ics, wft_vals, bft_ics, bft_vals, stm, score, result = batch.to_torch(device)
-                pred = model(wft_ics, wft_vals, bft_ics, bft_vals, stm)
+                wft_ics, bft_ics, stm, score, result = batch.to_torch(device)
+                pred = model(wft_ics, bft_ics, stm)
                 loss = compute_loss(pred, score, result, cfg.wdl_lambda)
 
                 opt.zero_grad(set_to_none=True)
@@ -193,7 +188,7 @@ class Trainer:
 
 def train(experiment_name, train_packname, val_packname, save_every=10,
           min_lr=1e-5, max_lr=8e-4, p_warmup=0.5, n_batches_per_epoch=6000, 
-          n_epochs=200, use_factorizer=True, wdl_lambda=1.0, batch_size=16384,
+          n_epochs=200, wdl_lambda=1.0, batch_size=16384,
           n_prefetch=4, n_workers=4, resume_from='', n_restarts=4):
 
     config = Config(
@@ -201,18 +196,29 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
         train_packname=train_packname, val_packname=val_packname,
         save_every=save_every, min_lr=min_lr, max_lr=max_lr, p_warmup=p_warmup,
         n_batches_per_epoch=n_batches_per_epoch, n_epochs=n_epochs, 
-        use_factorizer=use_factorizer, wdl_lambda=wdl_lambda, batch_size=batch_size,
+        wdl_lambda=wdl_lambda, batch_size=batch_size,
         n_prefetch=n_prefetch, n_workers=n_workers,
         resume_from=resume_from,
         n_restarts=n_restarts
     )
+
+    test_cfg = TestConfig(
+        exp_name=experiment_name,
+        cc_cmd='cutechess-cli',
+        eng_cmd=f'./saturn',
+        round_pairs=1000,
+        openings='/home/ktnkdoomer/Documents/openings/UHO_Lichess_4852_v1.epd',
+        tc_nodes=30000,
+        concurrency=12
+    )
+    tester = NetTester(test_cfg)
 
     os.makedirs(experiment_name, exist_ok=True)
 
     # ffi.load_module('../build/Release/satpymod.dll')
     ffi.load_module('../build/libsatpymod.so')
 
-    model = Model(halfkp.N_FT + halfkp.N_VIRT_FT * use_factorizer).cuda()
+    model = Model().cuda()
     if resume_from:
         print(model.load_state_dict(torch.load(resume_from)))
     model.compile()
@@ -226,25 +232,38 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
     assert run
 
     best_val_loss = float('+inf')
+    all_results = []
+
     def on_epoch_end(epoch, train_loss, val_loss):
         nonlocal best_val_loss
         wandb.log({
             'train_loss': train_loss,
             'val_loss': val_loss,
         })
+        
+        results = tester.get_results()
+        all_results.extend(results)
+        all_results.sort(key=lambda x: x[1], reverse=True)
 
-        if val_loss < best_val_loss:
-            name = 'best_net.pt'
-            path = f'{config.experiment_name}/{name}'
-            torch.save(model.state_dict(), path)
-            run.log_model(path, name=name)
-            best_val_loss = val_loss
+
+        if results:
+            print()
+            for name, elo, err in results:
+                print('{} {} +/- {}'.format(name, elo, err))
+                wandb.log({ 'elo_diff': elo })
+
+            print('Top 3 nets:')
+            for name, elo, err in all_results[:3]:
+                print('{} {} +/- {}'.format(name, elo, err))
 
         if epoch % config.save_every == 0 or epoch + 1 == config.n_epochs:
+
             name = f'net_{epoch}.pt'
             path = f'{config.experiment_name}/{name}'
             torch.save(model.state_dict(), path)
-            run.log_model(path, name=name)
+
+            tester.enqueue_net(f'net_{epoch}')
+            # run.log_model(path, name=name)
 
     trainer = Trainer(config)
     trainer.on_epoch_end = on_epoch_end # pyright: ignore

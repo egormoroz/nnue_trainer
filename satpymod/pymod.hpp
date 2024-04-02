@@ -17,9 +17,8 @@
 class BatchStream;
 struct SparseBatch;
 
-EXPORT BatchStream* create_batch_stream(
-        const char *bin_fpath, int n_prefetch, int n_workers, 
-        int batch_size, int add_virtual, int wait_on_end);
+EXPORT BatchStream* create_batch_stream(const char *bin_fpath, int n_prefetch, 
+        int n_workers, int batch_size);
 
 EXPORT void destroy_batch_stream(BatchStream *bs);
 

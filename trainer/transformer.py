@@ -27,7 +27,6 @@ using int32_t = int;
 extern "C" __global__
 void feature_transformer_slice_forward(
         const int32_t* const feature_indices,
-        const float*   const feature_values,
         const float*   const weight,
         const float*   const bias,
               float*   const output)
@@ -47,7 +46,6 @@ void feature_transformer_slice_forward(
     float* shared_output_slice = shared_output + slice_offset;
 
     const int32_t* feature_index_row = feature_indices + block_idx * max_active_features;
-    const float* feature_value_row = feature_values + block_idx * max_active_features;
 
     #pragma unroll
     for (uint32_t s = 0; s < output_thread_slice_size; ++s)
@@ -55,13 +53,12 @@ void feature_transformer_slice_forward(
 
     for (uint32_t k = 0; k < max_active_features; ++k) {
         const int32_t feature_index = feature_index_row[k];
-        const float   feature_value = feature_value_row[k];
 
         if (feature_index != -1) {
             const float* weight_slice = weight + feature_index * output_size + slice_offset;
             #pragma unroll
             for (uint32_t s = 0; s < output_thread_slice_size; ++s)
-                shared_output_slice[s] += weight_slice[s] * feature_value;
+                shared_output_slice[s] += weight_slice[s];
         } else break;
     }
 
@@ -96,7 +93,6 @@ using int32_t = int;
 extern "C" __global__
 void feature_transformer_slice_backward(
     const int32_t* const feature_indices,
-    const float*   const feature_values,
           float*   const weight_grad,
           float*   const bias_grad,
     const float*   const output_grad)
@@ -116,7 +112,6 @@ void feature_transformer_slice_backward(
           float* shared_output_grad_slice = shared_output_grad + slice_offset;
 
     const int32_t* feature_index_row = feature_indices + block_idx * max_active_features;
-    const float* feature_value_row = feature_values + block_idx * max_active_features;
 
     #pragma unroll
     for (uint32_t s = 0; s < output_thread_slice_size; ++s)
@@ -131,7 +126,6 @@ void feature_transformer_slice_backward(
 
     for (uint32_t k = 0; k < max_active_features; ++k) {
         const int32_t feature_index = feature_index_row[k];
-        const float   feature_value = feature_value_row[k];
 
         if (feature_index != -1) {
             float* const weight_grad_slice = weight_grad 
@@ -140,7 +134,7 @@ void feature_transformer_slice_backward(
             for (uint32_t s = 0; s < output_thread_slice_size; ++s) {
                 const float sog = shared_output_grad_slice[s];
                 if (sog != 0.f)
-                    atomicAdd(&weight_grad_slice[s], sog * feature_value);
+                    atomicAdd(&weight_grad_slice[s], sog);
             }
         } else break;
     }
@@ -158,15 +152,11 @@ void feature_transformer_slice_backward(
 
 class FeatureTransformerSliceFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, ft_ics, ft_vals, weight, bias): # pyright: ignore
-        ctx.save_for_backward(ft_ics, ft_vals, weight, bias)
+    def forward(ctx, ft_ics, weight, bias): # pyright: ignore
+        ctx.save_for_backward(ft_ics, weight, bias)
 
         assert len(ft_ics.shape) == 2
-        assert len(ft_vals.shape) == 2
-        assert ft_ics.shape[0] == ft_vals.shape[0]
-        assert ft_ics.shape[1] == ft_vals.shape[1]
         assert ft_ics.dtype == torch.int32
-        assert ft_vals.dtype == torch.float32
 
         assert len(weight.shape) == 2
         assert weight.dtype == torch.float32
@@ -175,16 +165,13 @@ class FeatureTransformerSliceFunction(torch.autograd.Function):
         assert bias.dtype == torch.float32
 
         assert ft_ics.is_cuda
-        assert ft_vals.is_cuda
         assert weight.is_cuda
         assert bias.is_cuda
 
-        assert ft_vals.device == ft_ics.device
         assert weight.device == ft_ics.device
         assert bias.device == ft_ics.device
 
         assert ft_ics.is_contiguous()
-        assert ft_vals.is_contiguous()
         assert weight.is_contiguous()
         assert bias.is_contiguous()
 
@@ -201,7 +188,6 @@ class FeatureTransformerSliceFunction(torch.autograd.Function):
             grid=(batch_size,),
             args=(
                 ft_ics.data_ptr(),
-                ft_vals.data_ptr(),
                 weight.data_ptr(),
                 bias.data_ptr(),
                 output.data_ptr(),
@@ -213,11 +199,10 @@ class FeatureTransformerSliceFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output): # pyright: ignore
         assert not ctx.needs_input_grad[0]
-        assert not ctx.needs_input_grad[1]
 
         grad_output = grad_output.contiguous()
 
-        ft_ics, ft_vals, weight, bias = ctx.saved_tensors
+        ft_ics, weight, bias = ctx.saved_tensors
 
         batch_size = ft_ics.shape[0]
         max_active_features = ft_ics.shape[1]
@@ -231,14 +216,13 @@ class FeatureTransformerSliceFunction(torch.autograd.Function):
             grid=(batch_size,),
             args=(
                 ft_ics.data_ptr(),
-                ft_vals.data_ptr(),
                 weight_grad.data_ptr(),
                 bias_grad.data_ptr(),
                 grad_output.data_ptr(),
             )
         )
 
-        return None, None, weight_grad, bias_grad
+        return None, weight_grad, bias_grad
 
 
 class FeatureTransformer(nn.Module):
@@ -264,7 +248,7 @@ class FeatureTransformer(nn.Module):
         self.weight.data = torch.cat((self.weight.data, padding))
 
     @torch._dynamo.disable()
-    def forward(self, ft_ics, ft_vals):
-        return FeatureTransformerSliceFunction.apply(ft_ics, ft_vals, self.weight, self.bias)
+    def forward(self, ft_ics):
+        return FeatureTransformerSliceFunction.apply(ft_ics, self.weight, self.bias)
 
 

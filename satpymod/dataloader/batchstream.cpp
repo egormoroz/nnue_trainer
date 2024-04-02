@@ -10,9 +10,8 @@
 
 
 BatchStream::BatchStream(const char* bin_fpath, int n_prefetch, 
-        int n_workers, int bs, bool add_virtual, bool wait_on_end) 
-    : batch_size_(bs), add_virtual_(add_virtual), n_workers_(n_workers),
-      exit_(false), n_chunks_processed_(0), wait_on_end_(wait_on_end),
+        int n_workers, int bs) 
+    : batch_size_(bs), n_workers_(n_workers), exit_(false), 
       chunk_queue_(n_workers), batch_queue_(n_prefetch)
 {
     te_buffer_.reserve(batch_size_ * n_workers);
@@ -37,8 +36,6 @@ void BatchStream::stop() {
     exit_ = true;
     chunk_queue_.stop();
     batch_queue_.stop();
-
-    chunk_done_.notify_all();
 }
 
 void BatchStream::file_reader_routine() {
@@ -124,15 +121,8 @@ void BatchStream::worker_routine() {
                 te.stm = cr.board.side_to_move();
                 te.result = cr.result;
 
-                te.n_wfts = halfkp::get_active_features(cr.board, WHITE, te.wfts);
-                te.n_bfts = halfkp::get_active_features(cr.board, BLACK, te.bfts);
-
-                if (add_virtual_) {
-                    te.n_wfts += halfkp::get_virtual_active_features(
-                            cr.board, WHITE, te.wfts + te.n_wfts);
-                    te.n_bfts += halfkp::get_virtual_active_features(
-                            cr.board, BLACK, te.bfts + te.n_bfts);
-                }
+                te.n_wfts = mini::get_active_features(cr.board, WHITE, te.wfts);
+                te.n_bfts = mini::get_active_features(cr.board, BLACK, te.bfts);
 
                 thread_te_buf.push_back(te);
             }
@@ -156,13 +146,6 @@ void BatchStream::worker_routine() {
         if ((const char*)ptr - ch.data != head.body_size + head.SIZE)
             fprintf(stderr, "[WARNINIG] BatchStream::worker_routine: chunk size mismatch.\n");
 
-        /* if (!exit_ && wait_on_end_) { */
-        /*     collect_leftovers(thread_te_buf.data(), thread_te_buf.size()); */
-        /*     thread_te_buf.clear(); */
-
-        /*     ++n_chunks_processed_; */
-        /*     chunk_done_.notify_all(); */
-        /* } */
 
 skip_chunk:
         free_chunk(ch);
@@ -196,8 +179,7 @@ SparseBatch BatchStream::allocate_batch() {
     }
     lck.unlock();
 
-    const int max_active_fts = add_virtual_ ? halfkp::MAX_TOTAL_FTS : halfkp::MAX_REAL_FTS;
-    return SparseBatch(batch_size_, max_active_fts);
+    return SparseBatch(batch_size_, mini::MAX_TOTAL_FTS);
 }
 
 void BatchStream::free_batch(SparseBatch b) {

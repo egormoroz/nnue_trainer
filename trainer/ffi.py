@@ -16,8 +16,11 @@ def load_module(dll_path):
 def setup_prototypes(dll):
     dll.create_batch_stream.restype = ctypes.c_void_p
     dll.create_batch_stream.argtypes = [
-            ctypes.c_char_p, ctypes.c_int, ctypes.c_int, 
-            ctypes.c_int, ctypes.c_int, ctypes.c_int]
+        ctypes.c_char_p, 
+        ctypes.c_int, 
+        ctypes.c_int, 
+        ctypes.c_int
+    ]
 
     dll.destroy_batch_stream.restype = None
     dll.destroy_batch_stream.argtypes = [ctypes.c_void_p]
@@ -54,14 +57,11 @@ class SparseBatch(ctypes.Structure):
         wft_ics = torch.from_numpy(wft_ics).to(device, non_blocking=True)
         bft_ics = torch.from_numpy(bft_ics).to(device, non_blocking=True)
 
-        wft_vals = torch.ones_like(wft_ics, dtype=torch.float32)
-        bft_vals = torch.ones_like(bft_ics, dtype=torch.float32)
-
         stm = torch.from_numpy(stm).pin_memory().to(device, non_blocking=True)
         score = torch.from_numpy(score).pin_memory().to(device, non_blocking=True)
         result = torch.from_numpy(result).pin_memory().to(device, non_blocking=True)
 
-        return wft_ics, wft_vals, bft_ics, bft_vals, stm, score, result
+        return wft_ics, bft_ics, stm, score, result
 
     def __repr__(self) -> str:
         return f'SparseBatch(size={self.size}, max_active_fts={self.max_active_fts})'
@@ -72,16 +72,14 @@ SparseBatchPtr = ctypes.POINTER(SparseBatch)
 
 class BatchStream:
     def __init__(self, bin_fpath: str, n_prefetch: int, n_workers: int,
-                 batch_size: int, add_virtual: int, wait_on_end: int):
+                 batch_size: int):
         assert dllmod
         self.stream = dllmod.create_batch_stream(
-                bin_fpath.encode('utf-8'), n_prefetch, 
-                n_workers, batch_size, add_virtual, wait_on_end)
+                bin_fpath.encode('utf-8'), n_prefetch, n_workers, batch_size)
 
     def next_batch(self):
         assert dllmod
-        batch = dllmod.next_batch(self.stream).contents
-        return batch if batch.size > 0 else None
+        return dllmod.next_batch(self.stream).contents
 
 
     def __del__(self):

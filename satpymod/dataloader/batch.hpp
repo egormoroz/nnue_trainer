@@ -1,13 +1,11 @@
 #ifndef BATCH_HPP
 #define BATCH_HPP
 
-#include "halfkp.hpp"
+#include "ftset.hpp"
 
 struct TrainingEntry {
-    static_assert(halfkp::N_FT + halfkp::N_VIRT_FT <= 0xFFFF);
-
-    uint16_t wfts[halfkp::MAX_TOTAL_FTS];
-    uint16_t bfts[halfkp::MAX_TOTAL_FTS];
+    uint16_t wfts[mini::MAX_TOTAL_FTS];
+    uint16_t bfts[mini::MAX_TOTAL_FTS];
 
     uint8_t n_wfts;
     uint8_t n_bfts;

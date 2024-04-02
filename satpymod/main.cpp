@@ -21,7 +21,7 @@ int main() {
     using clk_t = std::chrono::steady_clock;
     constexpr char path[] = "d6v6_200mil_2.bin";
 
-    BatchStream stream(path, 1, 8, 1024*16, false, false);
+    BatchStream stream(path, 1, 8, 1024*16);
 
     auto start = clk_t::now();
     int batch_per_sec = 0;
