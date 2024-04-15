@@ -18,38 +18,49 @@ S_A = 255
 N_HIDDEN = 512
 
 
-def get_psqt_vals():
-    piece_val = {
-        chess.PAWN: 82,
-        chess.KNIGHT: 337,
-        chess.BISHOP: 365,
-        chess.ROOK: 477,
-        chess.QUEEN: 1025,
-    }
+class PSQT(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.emb = nn.Embedding(N_FEATURES + 1, 1, padding_idx=0)
+        self._init_psqt()
 
-    psqt_vals = torch.zeros(N_FEATURES)
+    @torch.no_grad()
+    def _init_psqt(self):
+        piece_val = {
+            chess.PAWN: 82,
+            chess.KNIGHT: 337,
+            chess.BISHOP: 365,
+            chess.ROOK: 477,
+            chess.QUEEN: 1025,
+        }
 
-    for ksq in range(64):
-        for pt, value in piece_val.items():
-            value = value / S_A
-            for sq in range(64):
-                wp, bp = [chess.Piece(pt, c) for c in chess.COLORS]
-                widx = feature_index(chess.WHITE, sq, wp, ksq)
-                bidx = feature_index(chess.WHITE, sq, bp, ksq)
-                psqt_vals[widx] = value
-                psqt_vals[bidx] = -value
-    return psqt_vals
+        self.emb.weight.data.zero_()
+
+        for ksq in range(64):
+            for pt, value in piece_val.items():
+                value = value / S_A
+                for sq in range(64):
+                    wp, bp = [chess.Piece(pt, c) for c in chess.COLORS]
+                    widx = feature_index(chess.WHITE, sq, wp, ksq)
+                    bidx = feature_index(chess.WHITE, sq, bp, ksq)
+                    self.emb.weight.data[1 + widx] = value
+                    self.emb.weight.data[1 + bidx] = -value
+
+    def forward(self, ics):
+        x = self.emb(ics + 1).sum(dim=(1, 2))
+        return x.view(-1, 1)
 
 
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
-        self.ft = FeatureTransformer(N_FEATURES, N_HIDDEN, get_psqt_vals())
+        self.ft = FeatureTransformer(N_FEATURES, N_HIDDEN)
+        self.psqt = PSQT()
         self.fc_out = nn.Linear(2*N_HIDDEN, 1)
 
     def forward(self, wft_ics, bft_ics, stm):
-        wfts, wpsqt = self.ft(wft_ics)
-        bfts, bpsqt = self.ft(bft_ics)
+        wfts, bfts = self.ft(wft_ics), self.ft(bft_ics)
+        wpsqt, bpsqt = self.psqt(wft_ics), self.psqt(bft_ics)
 
         x = (1 - stm) * torch.cat((wfts, bfts), dim=-1)
         x += stm * torch.cat((bfts, wfts), dim=-1)
