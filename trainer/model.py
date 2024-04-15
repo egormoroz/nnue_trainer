@@ -11,57 +11,57 @@ WDL_SCALE = 162
 
 FT_WEIGHT_MAXABS = 910
 
-FC_OUT_MAXABS = 8192
-S_W = 4096
-S_A = 256
+FC_OUT_MAXABS = 128
+S_W = 64
+S_A = 255
+
+N_HIDDEN = 512
+
+
+def get_psqt_vals():
+    piece_val = {
+        chess.PAWN: 82,
+        chess.KNIGHT: 337,
+        chess.BISHOP: 365,
+        chess.ROOK: 477,
+        chess.QUEEN: 1025,
+    }
+
+    psqt_vals = torch.zeros(N_FEATURES)
+
+    for ksq in range(64):
+        for pt, value in piece_val.items():
+            value = value / S_A
+            for sq in range(64):
+                wp, bp = [chess.Piece(pt, c) for c in chess.COLORS]
+                widx = feature_index(chess.WHITE, sq, wp, ksq)
+                bidx = feature_index(chess.WHITE, sq, bp, ksq)
+                psqt_vals[widx] = value
+                psqt_vals[bidx] = -value
+    return psqt_vals
+
 
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
-        self.ft = FeatureTransformer(N_FEATURES, 256 + 1)
-        self.fc_out = nn.Linear(512, 1)
-
-        self._init_psqt()
-
-    @torch.no_grad()
-    def _init_psqt(self):
-        piece_val = {
-            chess.PAWN: 82,
-            chess.KNIGHT: 337,
-            chess.BISHOP: 365,
-            chess.ROOK: 477,
-            chess.QUEEN: 1025,
-        }
-
-        self.ft.weight[:, -1] = 0
-        self.ft.bias[-1] = 0
-
-        for ksq in range(64):
-            for pt, value in piece_val.items():
-                value = value / S_A
-                for sq in range(64):
-                    wp, bp = [chess.Piece(pt, c) for c in chess.COLORS]
-                    widx = feature_index(chess.WHITE, sq, wp, ksq)
-                    bidx = feature_index(chess.WHITE, sq, bp, ksq)
-                    self.ft.weight.data[widx, -1] = value
-                    self.ft.weight.data[bidx, -1] = -value
+        self.ft = FeatureTransformer(N_FEATURES, N_HIDDEN, get_psqt_vals())
+        self.fc_out = nn.Linear(2*N_HIDDEN, 1)
 
     def forward(self, wft_ics, bft_ics, stm):
-        wfts, wpsqt = torch.split(self.ft(wft_ics), 256, dim=1)
-        bfts, bpsqt = torch.split(self.ft(bft_ics), 256, dim=1)
+        wfts, wpsqt = self.ft(wft_ics)
+        bfts, bpsqt = self.ft(bft_ics)
 
         x = (1 - stm) * torch.cat((wfts, bfts), dim=-1)
         x += stm * torch.cat((bfts, wfts), dim=-1)
 
-        x = self.fc_out(torch.clip(x, 0, 1))
+        x = self.fc_out(torch.clip(x, 0, 1).pow(2))
 
         return x + (wpsqt - bpsqt) * (0.5 - stm)
 
     @torch.no_grad()
     def _clip_weights(self):
-        pass
-        # self.ft.weight.data.clip(-FT_WEIGHT_MAXABS/S_A, FT_WEIGHT_MAXABS/S_A)
-        # self.fc_out.weight.data.clip(-FC_OUT_MAXABS/S_W, FC_OUT_MAXABS/S_W)
+        self.ft.weight.data.clip(-FT_WEIGHT_MAXABS/S_A, FT_WEIGHT_MAXABS/S_A)
+        self.fc_out.weight.data.clip(-FC_OUT_MAXABS/S_W, FC_OUT_MAXABS/S_W)
 
     def configure_optimizers(self, config):
         opt = Ranger21(self.parameters(), lr=config.max_lr, warmdown_min_lr=config.min_lr,

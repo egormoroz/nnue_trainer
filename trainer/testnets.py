@@ -12,7 +12,8 @@ class TestConfig:
     exp_name: str
     
     cc_cmd: str
-    eng_cmd: str
+    base_eng_cmd: str
+    dev_eng_cmd: str
 
     round_pairs: int
     openings: str
@@ -30,7 +31,7 @@ def play_games(net_name, cfg: TestConfig, reserialize=True):
     net_path = Path('{}/{}.nnue'.format(cfg.exp_name, net_name)).absolute()
 
     if reserialize or not net_path.exists():
-        serialize_net(pt_path, net_path)
+        serialize_net(str(pt_path), str(net_path))
 
     cc_with_args = [
         cfg.cc_cmd,
@@ -50,15 +51,15 @@ def play_games(net_name, cfg: TestConfig, reserialize=True):
     if cfg.pgn_out:
         cc_with_args += ['-pgnout', f'{cfg.exp_name}.pgn']
 
-    eng_folder = Path(cfg.eng_cmd).readlink().parent.absolute()
+    base_eng_folder = Path(cfg.base_eng_cmd).readlink().parent.absolute()
 
     cc_with_args += [
-        '-engine', f'cmd={cfg.eng_cmd}', f'dir={eng_folder}', f'name={net_name}',
+        '-engine', f'cmd={cfg.dev_eng_cmd}', f'name={net_name}',
         f'option.evalfile={net_path}'
     ]
 
     cc_with_args += [
-        '-engine', f'cmd={cfg.eng_cmd}', f'dir={eng_folder}', 'name=base'
+        '-engine', f'cmd={cfg.base_eng_cmd}', f'dir={base_eng_folder}', 'name=base'
     ]
 
     output = subprocess.check_output(cc_with_args).decode('utf-8')
@@ -109,7 +110,8 @@ if __name__ == '__main__':
     cfg = TestConfig(
         exp_name='net768-512-kingfix',
         cc_cmd='cutechess-cli',
-        eng_cmd=f'./saturn',
+        dev_eng_cmd=f'./saturn',
+        base_eng_cmd=f'./saturn',
         round_pairs=20,
         openings='/home/ktnkdoomer/Documents/openings/UHO_Lichess_4852_v1.epd',
         tc_nodes=30000,

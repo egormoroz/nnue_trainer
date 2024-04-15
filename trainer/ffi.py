@@ -28,6 +28,12 @@ def setup_prototypes(dll):
     dll.next_batch.restype = SparseBatchPtr
     dll.next_batch.argtypes = [ctypes.c_void_p]
 
+    dll.compress_net.restype = int
+    dll.compress_net.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+
+    dll.decompress_net.restype = int
+    dll.decompress_net.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+
 
 class SparseBatch(ctypes.Structure):
     _fields_ = [
@@ -85,5 +91,14 @@ class BatchStream:
     def __del__(self):
         assert dllmod
         dllmod.destroy_batch_stream(self.stream)
+
+
+def compress_net(path_in: str, path_out: str) -> bool:
+    assert dllmod
+    return dllmod.compress_net(path_in.encode('utf-8'), path_out.encode('utf-8'))
+
+def decompress_net(path_in: str, path_out: str) -> bool:
+    assert dllmod
+    return dllmod.decompress_net(path_in.encode('utf-8'), path_out.encode('utf-8'))
 
 

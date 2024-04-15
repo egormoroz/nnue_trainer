@@ -24,4 +24,7 @@ EXPORT void destroy_batch_stream(BatchStream *bs);
 
 EXPORT SparseBatch* next_batch(BatchStream *bs);
 
+EXPORT int compress_net(const char* path_in, const char* path_out);
+EXPORT int decompress_net(const char* path_in, const char* path_out);
+
 #endif

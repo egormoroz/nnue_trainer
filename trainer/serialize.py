@@ -2,23 +2,25 @@ import torch
 from model import *
 import fire
 from pathlib import Path
+import ffi
+import os
 
 
 def write_transformer(buf: bytearray, transformer):
-    psqt = transformer.weight.data[:, -1].ravel()
-    psqt = psqt.mul(S_A).round().to(torch.int16)
-    buf.extend(psqt.numpy().tobytes())
-
-    bias = transformer.bias.data[:-1].ravel()
+    bias = transformer.bias.data.ravel()
     bias = bias.mul(S_A).round().to(torch.int16)
     buf.extend(bias.numpy().tobytes())
     
-    weight = transformer.weight.data[:, :-1].ravel()
+    weight = transformer.weight.data.ravel()
     weight = weight.mul(S_A).round().to(torch.int16)
     buf.extend(weight.numpy().tobytes())
 
 
 def serialize(buf: bytearray, model: Model):
+    psqt = model.psqt.emb.weight.data.ravel()[1:]
+    psqt = psqt.mul(S_A).round().to(torch.int16)
+    buf.extend(psqt.numpy().tobytes())
+
     write_transformer(buf, model.ft)
 
     bias = model.fc_out.bias.data.ravel()
@@ -29,7 +31,7 @@ def serialize(buf: bytearray, model: Model):
     weight = weight.mul(S_W).round().to(torch.int16)
     buf.extend(weight.numpy().tobytes())
 
-def serialize_net(pt_path_in, nnue_path_out):
+def serialize_net(pt_path_in: str, nnue_path_out: str, compress=False):
     model = Model()
     model.load_state_dict(torch.load(pt_path_in))
 
@@ -37,6 +39,13 @@ def serialize_net(pt_path_in, nnue_path_out):
     serialize(buf, model)
     with open(nnue_path_out, 'wb') as f:
         f.write(buf)
+    
+    if compress:
+        ffi.compress_net(
+            nnue_path_out, 
+            nnue_path_out + '.packed',
+        )
+        os.rename(nnue_path_out + '.packed', nnue_path_out)
 
 def serialize_cli(*pt_files):
     for pt_in in pt_files:

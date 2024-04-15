@@ -205,11 +205,12 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
     test_cfg = TestConfig(
         exp_name=experiment_name,
         cc_cmd='cutechess-cli',
-        eng_cmd=f'./saturn',
-        round_pairs=1000,
+        base_eng_cmd=f'./saturn_base',
+        dev_eng_cmd=f'./saturn_dev',
+        round_pairs=2000,
         openings='/home/ktnkdoomer/Documents/openings/UHO_Lichess_4852_v1.epd',
-        tc_nodes=30000,
-        concurrency=12
+        tc_nodes=25000,
+        concurrency=8
     )
     tester = NetTester(test_cfg)
 
@@ -234,40 +235,47 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
     best_val_loss = float('+inf')
     all_results = []
 
+    # def report_tester_results():
+    #     results = tester.get_results()
+    #     all_results.extend(results)
+    #     all_results.sort(key=lambda x: x[1], reverse=True)
+
+
+    #     if results:
+    #         print()
+    #         for name, elo, err in results:
+    #             print('{} {} +/- {}'.format(name, elo, err))
+    #             wandb.log({ 'elo_diff': elo })
+
+    #         print('Top 3 nets:')
+    #         for name, elo, err in all_results[:3]:
+    #             print('{} {} +/- {}'.format(name, elo, err))
+
     def on_epoch_end(epoch, train_loss, val_loss):
-        nonlocal best_val_loss
+        pass
+        # nonlocal best_val_loss
         # wandb.log({
         #     'train_loss': train_loss,
         #     'val_loss': val_loss,
         # })
-        
-        results = tester.get_results()
-        all_results.extend(results)
-        all_results.sort(key=lambda x: x[1], reverse=True)
 
+        # report_tester_results()
 
-        if results:
-            print()
-            for name, elo, err in results:
-                print('{} {} +/- {}'.format(name, elo, err))
-                # wandb.log({ 'elo_diff': elo })
+        # if epoch > 0 and (epoch % config.save_every == 0 or epoch + 1 == config.n_epochs):
 
-            print('Top 3 nets:')
-            for name, elo, err in all_results[:3]:
-                print('{} {} +/- {}'.format(name, elo, err))
+        #     name = f'net_{epoch}.pt'
+        #     path = f'{config.experiment_name}/{name}'
+        #     torch.save(model.state_dict(), path)
 
-        if epoch % config.save_every == 0 or epoch + 1 == config.n_epochs:
-
-            name = f'net_{epoch}.pt'
-            path = f'{config.experiment_name}/{name}'
-            torch.save(model.state_dict(), path)
-
-            # tester.enqueue_net(f'net_{epoch}')
-            # run.log_model(path, name=name)
+        #     tester.enqueue_net(f'net_{epoch}')
+        #     run.log_model(path, name=name)
 
     trainer = Trainer(config)
     trainer.on_epoch_end = on_epoch_end # pyright: ignore
     trainer.train(model)
+
+    tester.join()
+    # report_tester_results()
 
 
 if __name__ == '__main__':
