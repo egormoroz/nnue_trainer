@@ -18,7 +18,7 @@ def write_transformer(buf: bytearray, transformer):
 
 def serialize(buf: bytearray, model: Model):
     psqt = model.psqt.emb.weight.data.ravel()[1:]
-    psqt = psqt.mul(S_A).round().to(torch.int16)
+    psqt = psqt.mul(S_O).round().to(torch.int16)
     buf.extend(psqt.numpy().tobytes())
 
     write_transformer(buf, model.ft)

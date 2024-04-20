@@ -14,6 +14,7 @@ FT_WEIGHT_MAXABS = 910
 FC_OUT_MAXABS = 128
 S_W = 64
 S_A = 255
+S_O = 400
 
 N_HIDDEN = 512
 
@@ -38,7 +39,7 @@ class PSQT(nn.Module):
 
         for ksq in range(64):
             for pt, value in piece_val.items():
-                value = value / S_A
+                value = value / S_O
                 for sq in range(64):
                     wp, bp = [chess.Piece(pt, c) for c in chess.COLORS]
                     widx = feature_index(chess.WHITE, sq, wp, ksq)
@@ -95,14 +96,14 @@ class Model(nn.Module):
         stm = torch.tensor(stm, dtype=torch.float32, device=device).view(1, 1)
 
         pred = self.forward(wft_ics, bft_ics, stm)
-        return pred * S_A
+        return pred * S_O
 
 
 def compute_loss(pred, score, game_result, lambda_):
     wdl_target = torch.sigmoid(score / WDL_SCALE)
     wdl_target = lambda_ * wdl_target + (1 - lambda_) * game_result
 
-    wdl_pred = torch.sigmoid(pred * S_A / WDL_SCALE)
+    wdl_pred = torch.sigmoid(pred * S_O / WDL_SCALE)
     loss = torch.pow(wdl_pred - wdl_target, 2).mean()
     return loss
 

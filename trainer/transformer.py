@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import cupy
 
+import halfkp
+
 
 def _kernel_with_threads(kernel, n_threads):
     def f(grid, args):
@@ -32,7 +34,6 @@ void feature_transformer_slice_forward(
     const uint32_t max_active_features = ##max_active_features##;
     const uint32_t output_thread_slice_size = ##output_thread_slice_size##;
     const uint32_t output_size = ##output_size##;
-    const uint32_t out_size = output_size + 1;
 
     __shared__
         float shared_output[output_size];
@@ -40,7 +41,7 @@ void feature_transformer_slice_forward(
     const uint32_t block_idx = blockIdx.x;
     const uint32_t slice_offset = threadIdx.x * output_thread_slice_size;
 
-    float* const output_slice = output + block_idx * out_size + slice_offset + 1;
+    float* const output_slice = output + block_idx * output_size + slice_offset;
     const float* bias_slice = bias + slice_offset;
     float* shared_output_slice = shared_output + slice_offset;
 
@@ -54,23 +55,11 @@ void feature_transformer_slice_forward(
         const int32_t feature_index = feature_index_row[k];
 
         if (feature_index != -1) {
-            const float* weight_slice = weight + feature_index * out_size + slice_offset + 1;
+            const float* weight_slice = weight + feature_index * output_size + slice_offset;
             #pragma unroll
             for (uint32_t s = 0; s < output_thread_slice_size; ++s)
                 shared_output_slice[s] += weight_slice[s];
         } else break;
-    }
-
-    if (threadIdx.x == 0) {
-        float psqt = 0;
-        for (uint32_t k = 0; k < max_active_features; ++k) {
-            const int32_t feature_index = feature_index_row[k];
-            if (feature_index != -1)
-                psqt += weight[feature_index * out_size];
-            else break;
-        }
-
-        output[block_idx * out_size] = psqt;
     }
 
     #pragma unroll
@@ -111,7 +100,6 @@ void feature_transformer_slice_backward(
     const uint32_t max_active_features = ##max_active_features##;
     const uint32_t output_thread_slice_size = ##output_thread_slice_size##;
     const uint32_t output_size = ##output_size##;
-    const uint32_t out_size = output_size + 1;
 
     __shared__
         float shared_output_grad[output_size];
@@ -119,7 +107,7 @@ void feature_transformer_slice_backward(
     const uint32_t block_idx = blockIdx.x;
     const uint32_t slice_offset = threadIdx.x * output_thread_slice_size;
 
-    const float* output_grad_slice   = output_grad + block_idx * out_size + slice_offset + 1;
+    const float* output_grad_slice   = output_grad + block_idx * output_size + slice_offset;
           float* bias_grad_slice     = bias_grad + slice_offset;
           float* shared_output_grad_slice = shared_output_grad + slice_offset;
 
@@ -141,7 +129,7 @@ void feature_transformer_slice_backward(
 
         if (feature_index != -1) {
             float* const weight_grad_slice = weight_grad 
-                + feature_index * out_size + slice_offset + 1;
+                + feature_index * output_size + slice_offset;
             #pragma unroll
             for (uint32_t s = 0; s < output_thread_slice_size; ++s) {
                 const float sog = shared_output_grad_slice[s];
@@ -151,16 +139,6 @@ void feature_transformer_slice_backward(
         } else break;
     }
 
-    if (threadIdx.x == 0) {
-        const float sog = output_grad_slice[0];
-
-        for (uint32_t k = 0; k < max_active_features; ++k) {
-            const int32_t feature_index = feature_index_row[k];
-            if (feature_index != -1) {
-                atomicAdd(&weight_grad[feature_index * out_size], sog);
-            } else break;
-        }
-    }
 }
     '''.replace('##max_active_features##', str(max_active_features)) \
        .replace('##output_thread_slice_size##', str(output_size // n_threads)) \
@@ -205,7 +183,7 @@ class FeatureTransformerSliceFunction(torch.autograd.Function):
         output = torch.empty((batch_size, output_size), dtype=torch.float32, 
                              device=device, requires_grad=True)
 
-        kernel = _make_forward_kernel(max_active_features, output_size - 1)
+        kernel = _make_forward_kernel(max_active_features, output_size)
         kernel(
             grid=(batch_size,),
             args=(
@@ -233,7 +211,7 @@ class FeatureTransformerSliceFunction(torch.autograd.Function):
         weight_grad = torch.zeros_like(weight, requires_grad=False)
         bias_grad = torch.zeros_like(bias, requires_grad=False)
 
-        kernel = _make_backward_kernel(max_active_features, output_size - 1)
+        kernel = _make_backward_kernel(max_active_features, output_size)
         kernel(
             grid=(batch_size,),
             args=(
@@ -248,22 +226,29 @@ class FeatureTransformerSliceFunction(torch.autograd.Function):
 
 
 class FeatureTransformer(nn.Module):
-    def __init__(self, n_in, n_out, psqt_vals):
+    def __init__(self, n_in, n_out):
         super().__init__()
         self.n_in = n_in
         self.n_out = n_out
 
         s = n_in**-0.5
-        self.weight = nn.Parameter(torch.rand(n_in, n_out + 1) * (2 * s) - s)
+        self.weight = nn.Parameter(torch.rand(n_in, n_out) * (2 * s) - s)
         self.bias = nn.Parameter(torch.rand(n_out) * (2 * s) - s)
 
-        with torch.no_grad():
-            self.weight.data[:, 0] = psqt_vals
+    @torch.no_grad()
+    def coalesce_weights(self):
+        assert self.n_in == halfkp.N_FT + halfkp.N_VIRT_FT
+        self.weight.data = halfkp.coalesce_real_virtual_weights(self.weight.data)
+        self.n_in = halfkp.N_FT
+
+    @torch.no_grad()
+    def expand_dims(self):
+        self.n_in += halfkp.N_VIRT_FT
+        padding = torch.zeros((halfkp.N_VIRT_FT, self.n_out), device=self.weight.device)
+        self.weight.data = torch.cat((self.weight.data, padding))
 
     @torch._dynamo.disable()
     def forward(self, ft_ics):
-        out = FeatureTransformerSliceFunction.apply(ft_ics, self.weight, self.bias)
-        fts, psqt = torch.split(out, self.n_out, dim=1) # pyright: ignore
-        return fts, psqt
+        return FeatureTransformerSliceFunction.apply(ft_ics, self.weight, self.bias)
 
 

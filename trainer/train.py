@@ -1,4 +1,4 @@
-from model import Model, compute_loss
+from model import Model, PSQT, compute_loss
 import ffi
 
 import os
@@ -8,7 +8,7 @@ from tqdm.auto import trange
 import dataclasses
 import fire
 
-# import wandb
+import wandb
 
 from testnets import NetTester, TestConfig
 
@@ -114,6 +114,36 @@ class Trainer:
         self.model.train(training)
         return cum_loss / max(1, n)
 
+    def pretrain_psqt(self, model: Model):
+        n = 10000
+        print(f'pretraining psqt for {n} steps')
+
+        device = next(model.parameters()).device
+        psqt = model.psqt
+        opt = torch.optim.AdamW(psqt.parameters(), lr=1e-4)
+
+        for step in (t := trange(n)):
+            batch = self.train_stream.next_batch()
+            assert batch
+
+            lr = self.get_lr(step, n, 1e-6, 1e-3)
+            for g in opt.param_groups:
+                g['lr'] = lr
+
+
+            wft_ics, bft_ics, stm, score, result = batch.to_torch(device)
+            wpsqt, bpsqt = psqt(wft_ics), psqt(bft_ics)
+
+            pred = (wpsqt - bpsqt) * (0.5 - stm)
+            loss = compute_loss(pred, score, result, 1.0)
+
+            opt.zero_grad(set_to_none=True)
+            loss.backward()
+            opt.step()
+
+            t.set_description(f'batch_loss {loss.item():.4f}')
+
+        del opt
 
     def train(self, model: Model):
         opt = model.configure_optimizers(self.config)
@@ -139,6 +169,7 @@ class Trainer:
 
         for epoch in trange(cfg.n_epochs):
             cum_loss = 0
+
             for batch_idx in (t := trange(cfg.n_batches_per_epoch)):
                 batch = self.train_stream.next_batch()
                 assert batch
@@ -158,8 +189,8 @@ class Trainer:
                     
                     # r = abs_step / total_steps
                     r = restart_idx / cfg.n_restarts
-                    eta_min = exerp(r, cfg.min_lr, cfg.min_lr / 10, 1.6)
-                    eta_max = exerp(r, cfg.max_lr, cfg.max_lr / 10, 1.6)
+                    eta_min = exerp(r, cfg.min_lr, cfg.min_lr / 10, 1.3)
+                    eta_max = exerp(r, cfg.max_lr, cfg.max_lr / 10, 1.3)
 
                 for g in opt.param_groups:
                     g['lr'] = lr
@@ -178,6 +209,9 @@ class Trainer:
 
                 t.set_description('epoch {} BL {:.5f} TL {:.5f} VL {:.5f} LR {:.2e}'.format(
                     epoch, batch_loss.value, train_loss, val_loss, lr))
+
+                if batch_idx % 200 == 0:
+                    wandb.log({ 'batch_loss': loss.item() })
 
             train_loss = cum_loss / cfg.n_batches_per_epoch
             val_loss = self.compute_val_loss()
@@ -222,60 +256,63 @@ def train(experiment_name, train_packname, val_packname, save_every=10,
     model = Model().cuda()
     if resume_from:
         print(model.load_state_dict(torch.load(resume_from)))
-    model.compile()
 
-    # wandb.login()
-    # run = wandb.init(
-    #     project='nnue',
-    #     name=config.experiment_name,
-    #     config=dataclasses.asdict(config),
-    # )
-    # assert run
+    wandb.login()
+    run = wandb.init(
+        project='nnue',
+        name=config.experiment_name,
+        config=dataclasses.asdict(config),
+    )
+    assert run
 
     best_val_loss = float('+inf')
     all_results = []
 
-    # def report_tester_results():
-    #     results = tester.get_results()
-    #     all_results.extend(results)
-    #     all_results.sort(key=lambda x: x[1], reverse=True)
+    def report_tester_results():
+        results = tester.get_results()
+        all_results.extend(results)
+        all_results.sort(key=lambda x: x[1], reverse=True)
 
 
-    #     if results:
-    #         print()
-    #         for name, elo, err in results:
-    #             print('{} {} +/- {}'.format(name, elo, err))
-    #             wandb.log({ 'elo_diff': elo })
+        if results:
+            print()
+            for name, elo, err in results:
+                print('{} {} +/- {}'.format(name, elo, err))
+                wandb.log({ 'elo_diff': elo })
 
-    #         print('Top 3 nets:')
-    #         for name, elo, err in all_results[:3]:
-    #             print('{} {} +/- {}'.format(name, elo, err))
+            print('Top 3 nets:')
+            for name, elo, err in all_results[:3]:
+                print('{} {} +/- {}'.format(name, elo, err))
 
     def on_epoch_end(epoch, train_loss, val_loss):
         pass
-        # nonlocal best_val_loss
-        # wandb.log({
-        #     'train_loss': train_loss,
-        #     'val_loss': val_loss,
-        # })
+        nonlocal best_val_loss
+        wandb.log({
+            'train_loss': train_loss,
+            'val_loss': val_loss,
+        })
 
-        # report_tester_results()
+        report_tester_results()
 
-        # if epoch > 0 and (epoch % config.save_every == 0 or epoch + 1 == config.n_epochs):
+        if epoch % config.save_every == 0 or epoch + 1 == config.n_epochs:
 
-        #     name = f'net_{epoch}.pt'
-        #     path = f'{config.experiment_name}/{name}'
-        #     torch.save(model.state_dict(), path)
+            name = f'net_{epoch}.pt'
+            path = f'{config.experiment_name}/{name}'
+            torch.save(model.state_dict(), path)
 
-        #     tester.enqueue_net(f'net_{epoch}')
-        #     run.log_model(path, name=name)
+            tester.enqueue_net(f'net_{epoch}')
+            run.log_model(path, name=name)
 
     trainer = Trainer(config)
     trainer.on_epoch_end = on_epoch_end # pyright: ignore
+    if not resume_from:
+        trainer.pretrain_psqt(model)
+
+    model.compile()
     trainer.train(model)
 
     tester.join()
-    # report_tester_results()
+    report_tester_results()
 
 
 if __name__ == '__main__':
